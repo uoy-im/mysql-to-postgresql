@@ -9,13 +9,13 @@
 FROM debian:bookworm-slim
 
 # 安装 pgloader 和调试工具
-# - mysql-client: 用于测试 MySQL 连接 (mysql -h xxx -u xxx -p)
+# - default-mysql-client: 用于测试 MySQL 连接 (mysql -h xxx -u xxx -p)
 # - postgresql-client: 用于测试 PostgreSQL 连接 (psql postgres://xxx)
 RUN apt-get update && \
     apt-get install -y \
       pgloader \
       ca-certificates \
-      mysql-client \
+      default-mysql-client \
       postgresql-client && \
     rm -rf /var/lib/apt/lists/*
 
