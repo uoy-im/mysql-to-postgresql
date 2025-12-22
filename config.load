@@ -1,0 +1,400 @@
+-- ============================================================================
+-- pgloader 配置文件: MySQL -> PostgreSQL (Neon) 迁移
+-- 项目: Paraflow/MOXT
+-- 
+-- 使用方法:
+--   1. 填写下方的数据库连接信息
+--   2. 运行: pgloader config.load
+-- ============================================================================
+
+-- ============================================================================
+-- 数据库连接配置
+-- ============================================================================
+
+LOAD DATABASE
+    -- ========================================
+    -- MySQL 源数据库 (请填写你的配置)
+    -- ========================================
+    FROM mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DB}?sslmode=require
+
+    -- ========================================
+    -- PostgreSQL 目标数据库 (Neon)
+    -- 注意: Neon 需要特殊格式，endpoint ID 要放在密码前面
+    -- 格式: endpoint=<endpoint_id>;<password>
+    -- ========================================
+    INTO postgresql://${PG_USER}:endpoint=${PG_ENDPOINT_ID};${PG_PASSWORD}@${PG_ENDPOINT_ID}.${PG_REGION}.aws.neon.tech/${PG_DB}?sslmode=require&channel_binding=require
+
+
+-- ============================================================================
+-- 迁移选项
+-- ============================================================================
+
+WITH
+    -- 不删除目标库中的表（安全选项）
+    include no drop,
+    
+    -- 创建表结构
+    create tables,
+    
+    -- 创建索引
+    create indexes,
+    
+    -- 创建外键约束
+    foreign keys,
+    
+    -- 重置序列（确保自增ID从正确的值开始）
+    reset sequences,
+    
+    -- 批量插入大小（提高性能）
+    batch rows = 1000,
+    batch size = 10MB,
+    
+    -- 使用多个工作线程
+    workers = 4,
+    concurrency = 2
+
+
+-- ============================================================================
+-- 排除的表（如果有临时表或测试表）
+-- ============================================================================
+
+-- 如果需要排除某些表，取消下面的注释
+-- EXCLUDING TABLE NAMES MATCHING 'temp_', 'backup_', 'test_'
+
+
+-- ============================================================================
+-- 类型转换规则
+-- ============================================================================
+
+CAST
+    -- ========================================
+    -- 整数类型转换
+    -- ========================================
+    
+    -- TINYINT(1) 作为布尔值转换为 BOOLEAN
+    -- 这对于 success, matched, visible, is_private, is_revoked, deleted 等字段很重要
+    type tinyint when (= precision 1) to boolean using (= 1 ?tinyint),
+    
+    -- 其他 TINYINT 转换为 SMALLINT
+    type tinyint to smallint,
+    
+    -- INT 类型保持不变
+    type int to integer,
+    
+    -- BIGINT 类型保持不变
+    type bigint to bigint,
+    
+    -- 自增主键转换
+    type int with extra auto_increment to serial,
+    type bigint with extra auto_increment to bigserial,
+    
+    -- ========================================
+    -- 浮点类型转换
+    -- ========================================
+    
+    -- FLOAT 转换为 REAL (用于 level_1_score 等评分字段)
+    type float to real,
+    
+    -- DOUBLE 转换为 DOUBLE PRECISION
+    type double to double precision,
+    
+    -- ========================================
+    -- 日期时间类型转换
+    -- ========================================
+    
+    -- DATETIME 转换为 TIMESTAMP
+    -- 注意: 精度会保留 (datetime(3) -> timestamp(3))
+    type datetime to timestamp,
+    
+    -- TIMESTAMP 保持为 TIMESTAMP
+    type timestamp to timestamp,
+    
+    -- ========================================
+    -- 文本类型转换
+    -- ========================================
+    
+    -- MySQL 的各种 TEXT 类型都转换为 PostgreSQL 的 TEXT
+    -- PostgreSQL 的 TEXT 类型没有大小限制
+    type tinytext to text,
+    type mediumtext to text,
+    type longtext to text,
+    
+    -- ========================================
+    -- JSON 类型转换
+    -- ========================================
+    
+    -- JSON 转换为 JSONB (性能更好，支持索引)
+    -- 用于 provider_metadata 等字段
+    type json to jsonb,
+    
+    -- ========================================
+    -- 二进制类型转换（项目中未使用，但保留配置）
+    -- ========================================
+    
+    type blob to bytea,
+    type mediumblob to bytea,
+    type longblob to bytea
+
+
+-- ============================================================================
+-- 迁移后执行的 SQL
+-- 创建 dbutime 自动更新触发器（替代 MySQL 的 ON UPDATE CURRENT_TIMESTAMP）
+-- ============================================================================
+
+AFTER LOAD DO
+
+    -- ========================================
+    -- 1. 创建通用的更新时间触发器函数
+    -- ========================================
+    $$ 
+    CREATE OR REPLACE FUNCTION update_dbutime_column()
+    RETURNS TRIGGER AS $trigger$
+    BEGIN
+        NEW.dbutime = CURRENT_TIMESTAMP;
+        RETURN NEW;
+    END;
+    $trigger$ LANGUAGE plpgsql;
+    $$,
+
+    -- ========================================
+    -- 2. 为所有包含 dbutime 字段的表创建触发器
+    -- ========================================
+
+    -- benchmark_suite
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON benchmark_suite; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON benchmark_suite FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- benchmark_case
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON benchmark_case; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON benchmark_case FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- benchmark_turn
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON benchmark_turn; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON benchmark_turn FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- benchmark_run_batch_result
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON benchmark_run_batch_result; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON benchmark_run_batch_result FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- benchmark_run_case_result
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON benchmark_run_case_result; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON benchmark_run_case_result FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- benchmark_run_turn_result
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON benchmark_run_turn_result; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON benchmark_run_turn_result FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- chat_session
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON chat_session; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON chat_session FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- env_config
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON env_config; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON env_config FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- gaia_benchmark_case_result
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON gaia_benchmark_case_result; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON gaia_benchmark_case_result FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- gaia_benchmark_round_result
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON gaia_benchmark_round_result; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON gaia_benchmark_round_result FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- otp_send_record
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON otp_send_record; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON otp_send_record FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- pipeline
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON pipeline; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON pipeline FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- pipeline_result_event
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON pipeline_result_event; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON pipeline_result_event FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- pipeline_step
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON pipeline_step; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON pipeline_step FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- predefined_style
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON predefined_style; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON predefined_style FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- project
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON project; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON project FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- project_data
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON project_data; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON project_data FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- project_github_repo_binding
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON project_github_repo_binding; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON project_github_repo_binding FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- project_index
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON project_index; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON project_index FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- refer_doc_20260701
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON refer_doc_20260701; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON refer_doc_20260701 FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- test_user
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON test_user; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON test_user FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- text_content
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON text_content; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON text_content FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- third_party_application
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON third_party_application; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON third_party_application FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- token
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON token; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON token FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- uid_worker_node
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON uid_worker_node; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON uid_worker_node FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- "user" (注意: user 是保留字，需要加引号)
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON "user"; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON "user" FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- user_account
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON user_account; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON user_account FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- user_github_installation
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON user_github_installation; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON user_github_installation FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- user_role
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON user_role; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON user_role FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- user_submit_info
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON user_submit_info; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON user_submit_info FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- client_release
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON client_release; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON client_release FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- release_config
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON release_config; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON release_config FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- fulfill_ai_credit_change_log
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON fulfill_ai_credit_change_log; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON fulfill_ai_credit_change_log FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- fulfill_ai_credit_usage_log
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON fulfill_ai_credit_usage_log; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON fulfill_ai_credit_usage_log FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- fulfill_ai_credit
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON fulfill_ai_credit; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON fulfill_ai_credit FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- image_gen_record
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON image_gen_record; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON image_gen_record FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- fulfill_ai_free_credit_distribution_log
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON fulfill_ai_free_credit_distribution_log; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON fulfill_ai_free_credit_distribution_log FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- stripe_customer
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON stripe_customer; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON stripe_customer FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- stripe_subscription
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON stripe_subscription; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON stripe_subscription FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- stripe_payment
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON stripe_payment; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON stripe_payment FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- stripe_webhook_event
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON stripe_webhook_event; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON stripe_webhook_event FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- dbpaas_upsert_record
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON dbpaas_upsert_record; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON dbpaas_upsert_record FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- dbpaas_sql_record (没有 dbutime, 跳过)
+
+    -- referrer_info
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON referrer_info; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON referrer_info FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- referee_info
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON referee_info; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON referee_info FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- user_account_delete_record
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON user_account_delete_record; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON user_account_delete_record FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- user_query_history
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON user_query_history; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON user_query_history FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- dw_user_register_record (没有 dbutime, 跳过)
+
+    -- dws_user_activity_record_daily (没有 dbutime, 跳过)
+
+    -- gitea_backup_tasks
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON gitea_backup_tasks; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON gitea_backup_tasks FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- pipeline_v2
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON pipeline_v2; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON pipeline_v2 FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- pipeline_snapshot
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON pipeline_snapshot; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON pipeline_snapshot FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- pipeline_result_snippet
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON pipeline_result_snippet; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON pipeline_result_snippet FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- pipeline_event
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON pipeline_event; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON pipeline_event FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- pipeline_feedback
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON pipeline_feedback; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON pipeline_feedback FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- black_list
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON black_list; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON black_list FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- proxy_token
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON proxy_token; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON proxy_token FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- user_third_party_auth
+    $$ DROP TRIGGER IF EXISTS trg_update_dbutime ON user_third_party_auth; $$,
+    $$ CREATE TRIGGER trg_update_dbutime BEFORE UPDATE ON user_third_party_auth FOR EACH ROW EXECUTE FUNCTION update_dbutime_column(); $$,
+
+    -- ========================================
+    -- 3. 验证迁移结果
+    -- ========================================
+    
+    -- 输出表数量
+    $$ SELECT 'Tables migrated: ' || COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'; $$,
+    
+    -- 输出触发器数量
+    $$ SELECT 'Triggers created: ' || COUNT(*) FROM information_schema.triggers WHERE trigger_schema = 'public'; $$
+
+;
+
