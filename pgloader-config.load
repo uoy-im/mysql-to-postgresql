@@ -46,6 +46,9 @@ WITH
 -- 只迁移指定的表（多个表时逗号分隔）
 INCLUDING ONLY TABLE NAMES MATCHING 'dbpaas_sql_record'
 
+-- pgloader 默认会把 MySQL 数据库名作为 PostgreSQL 的 schema 名。可以通过下面这个把数据迁移到 public
+ALTER SCHEMA '${MYSQL_DB}' RENAME TO 'public'
+
 
 -- ============================================================================
 -- 类型转换规则；
