@@ -80,32 +80,6 @@ CAST
     --   - dws_user_activity_record_daily: subscription_type
     -- ========================================
     
-    -- TINYINT(1) 作为布尔值转换为 BOOLEAN
-    type tinyint when (= 1 precision) to boolean using tinyint-to-boolean,
-    
-    -- 其他 TINYINT 转换为 SMALLINT
-    type tinyint to smallint drop typemod,
-    
-    -- INT 类型保持不变
-    type int to integer drop typemod,
-    
-    -- BIGINT 类型保持不变
-    type bigint to bigint drop typemod,
-    
-    -- 自增主键转换（使用默认精度条件）
-    type int with extra auto_increment to serial when (< precision 10),
-    type int with extra auto_increment to bigserial when (<= 10 precision),
-    type bigint with extra auto_increment to bigserial,
-    
-    -- ========================================
-    -- 浮点类型转换
-    -- ========================================
-    
-    -- FLOAT 转换为 REAL (用于 level_1_score 等评分字段)
-    type float to real drop typemod,
-    
-    -- DOUBLE 转换为 DOUBLE PRECISION
-    type double to double precision drop typemod,
     
     -- DATETIME(3) 字段使用情况（共 129 处）:
     --
@@ -138,15 +112,6 @@ CAST
     -- type datetime to timestamptz（默认）
     type datetime to timestamp,
     
-    -- ========================================
-    -- 文本类型转换
-    -- ========================================
-    
-    -- MySQL 的各种 TEXT 类型都转换为 PostgreSQL 的 TEXT
-    -- PostgreSQL 的 TEXT 类型没有大小限制
-    type tinytext to text,
-    type mediumtext to text,
-    type longtext to text,
     
     -- ========================================
     -- JSON 类型转换
