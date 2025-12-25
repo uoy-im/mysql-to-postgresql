@@ -3,14 +3,16 @@ set -euo pipefail
 
 # ---------- 1. 检查必要环境变量 ----------
 required_vars=(
-  MYSQL_USER
-  MYSQL_PASS
-  MYSQL_HOST
   MYSQL_DB
-  PG_USER
-  PG_PASS
-  PG_HOST
+  MYSQL_HOST
+  MYSQL_PASSWORD
+  MYSQL_PORT
+  MYSQL_USER
   PG_DB
+  PG_ENDPOINT_ID
+  PG_PASSWORD
+  PG_REGION
+  PG_USER
 )
 
 for v in "${required_vars[@]}"; do
