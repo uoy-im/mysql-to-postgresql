@@ -22,7 +22,7 @@ RUN apt-get update && \
 WORKDIR /app
 
 # 复制迁移配置文件
-COPY pgloader-config.load .
+COPY . .
 
 # 不自动执行迁移！保持容器运行，等待手动执行
 # 优点：可以随时重跑、方便调试、查看日志
