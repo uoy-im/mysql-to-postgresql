@@ -2,7 +2,7 @@ LOAD DATABASE
     FROM mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DB}?useSSL=true
     -- ========================================
     -- 注意: Neon 需要特殊格式，endpoint ID 要放在密码前面
-    -- channel_binding=require 是 PostgreSQL 在 TLS 连接上的一种“额外安全校验”,是 Postgres 生态里的“最佳实践”
+    -- pgloader 不支持 channel_binding 参数，已移除
     -- ========================================
     INTO postgresql://${PG_USER}:endpoint=${PG_ENDPOINT_ID};${PG_PASSWORD}@${PG_ENDPOINT_ID}.${PG_REGION}.aws.neon.tech/${PG_DB}?sslmode=require
 
@@ -11,15 +11,15 @@ LOAD DATABASE
 -- ============================================================================
 
 WITH
-		============================================================================
+    -- ============================================================================
     -- 不截断（默认）
     -- 场景              | truncate            | no truncate
-		-- ---------------- | ------------------- | -------------------
-		-- 全量迁移          | 清空表，保证目标数据干净、不会重复 | 容易重复，除非表是空的
-		-- 分表迁移 / 断点重跑 | 会把之前成功的表数据清掉      | 可保留之前已迁的数据，只导剩下的
-		-- 增量 / 补数据      | 不适合               | 可以只追加缺失的数据（前提：幂等）
-    ============================================================================
-		no truncate,
+    -- ---------------- | ------------------- | -------------------
+    -- 全量迁移          | 清空表，保证目标数据干净、不会重复 | 容易重复，除非表是空的
+    -- 分表迁移 / 断点重跑 | 会把之前成功的表数据清掉      | 可保留之前已迁的数据，只导剩下的
+    -- 增量 / 补数据      | 不适合               | 可以只追加缺失的数据（前提：幂等）
+    -- ============================================================================
+    no truncate,
     -- 创建表结构（默认）
     create tables,
     -- 删除目标库中的表（默认）
@@ -43,10 +43,7 @@ WITH
     workers = 4,
     concurrency = 4
     
--- 排除的表（多个表时逗号分隔）
-EXCLUDING TABLE NAMES MATCHING 'dbpaas_upsert_record'
-
--- 测试 - 只迁移指定的表（多个表时逗号分隔）
+-- 只迁移指定的表（多个表时逗号分隔）
 INCLUDING ONLY TABLE NAMES MATCHING 'dbpaas_sql_record'
 
 
@@ -165,4 +162,3 @@ CAST
 
 AFTER LOAD DO
     $$ SELECT 'Tables migrated: ' || COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'; $$;
-
