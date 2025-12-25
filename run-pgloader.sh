@@ -34,6 +34,7 @@ printf '%s\n' "$template" > "$TMP_LOAD_FILE"
 
 # ---------- 执行 pgloader ----------
 echo "▶ Starting pgloader migration..."
-pgloader "$TMP_LOAD_FILE"
+# MySQL SSL 证书验证失败（AWS RDS 使用自签名证书）。需要在运行 pgloader 时添加 --no-ssl-cert-verification 参数。
+pgloader --no-ssl-cert-verification "$TMP_LOAD_FILE"
 
 rm -f "$TMP_LOAD_FILE"
