@@ -1,5 +1,5 @@
 LOAD DATABASE
-    FROM mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DB}/dbpaas_sql_record?useSSL=true
+    FROM mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DB}?useSSL=true
     -- ========================================
     -- 注意: Neon 需要特殊格式，endpoint ID 要放在密码前面
     -- channel_binding=require 是 PostgreSQL 在 TLS 连接上的一种“额外安全校验”,是 Postgres 生态里的“最佳实践”
@@ -45,6 +45,9 @@ WITH
     
 -- 排除的表（多个表时逗号分隔）
 EXCLUDING TABLE NAMES MATCHING 'dbpaas_upsert_record'
+
+-- 测试 - 只迁移指定的表（多个表时逗号分隔）
+INCLUDING ONLY TABLE NAMES MATCHING 'dbpaas_sql_record'
 
 
 -- ============================================================================
