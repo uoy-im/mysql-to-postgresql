@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ---------- 1. 检查必要环境变量 ----------
 required_vars=(
   MYSQL_DB
   MYSQL_HOST
@@ -15,24 +14,26 @@ required_vars=(
   PG_USER
 )
 
-for v in "${required_vars[@]}"; do
-  if [[ -z "${!v:-}" ]]; then
-    echo "❌ Missing required env var: $v" >&2
+template="$(cat pgloader-config.load)"
+
+# ---------- 校验并替换 ----------
+for var in "${required_vars[@]}"; do
+  value="${!var:-}"
+
+  if [[ -z "$value" ]]; then
+    echo "❌ Missing required env var: $var" >&2
     exit 1
   fi
+
+  template="${template//\$\{$var\}/$value}"
 done
 
-# ---------- 2. 生成临时 pgloader load 文件（变量展开） ----------
+# ---------- 写入临时文件 ----------
 TMP_LOAD_FILE="$(mktemp)"
+printf '%s\n' "$template" > "$TMP_LOAD_FILE"
 
-cat <<EOF > "$TMP_LOAD_FILE"
-$(cat pgloader-config.load)
-EOF
-
-# ---------- 3. 执行迁移 ----------
+# ---------- 执行 pgloader ----------
 echo "▶ Starting pgloader migration..."
 pgloader "$TMP_LOAD_FILE"
 
-# ---------- 4. 清理 ----------
 rm -f "$TMP_LOAD_FILE"
-echo "✅ Migration finished"
