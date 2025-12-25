@@ -6,8 +6,8 @@
 #   3. 执行: bash run-pgloader.sh
 #   4. 迁移完成后删除服务
 
-# 使用官方 pgloader 镜像 (v3.6.9 - 最新稳定版)
-FROM ghcr.io/dimitri/pgloader:v3.6.9
+# 使用官方 pgloader 镜像 (latest = v3.6.9)
+FROM dimitri/pgloader:latest
 
 # 安装调试工具
 # - default-mysql-client: 用于测试 MySQL 连接 (mysql -h xxx -u xxx -p)
