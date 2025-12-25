@@ -9,17 +9,7 @@
 # 使用官方 pgloader 镜像 (latest = v3.6.9)
 FROM dimitri/pgloader:latest
 
-# 安装调试工具
-# - default-mysql-client: 用于测试 MySQL 连接 (mysql -h xxx -u xxx -p)
-# - postgresql-client: 用于测试 PostgreSQL 连接 (psql postgres://xxx)
 USER root
-RUN apt-get update && \
-    apt-get install -y \
-      ca-certificates \
-      default-mysql-client \
-      postgresql-client && \
-    rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
 # 复制迁移配置文件
