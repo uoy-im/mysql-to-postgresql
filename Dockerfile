@@ -3,13 +3,22 @@
 # 使用方式:
 #   1. 在 Render 创建 Private Service（Root Directory: scripts/db-migration）
 #   2. 部署完成后打开 Shell
-#   3. 执行: bash run-pgloader.sh
+#   3. 执行: pgloader --no-ssl-cert-verification pgloader-config.load
 #   4. 迁移完成后删除服务
 
-# 使用官方 pgloader 镜像 (latest = v3.6.9)
-FROM dimitri/pgloader:latest
+FROM debian:bookworm-slim
 
-USER root
+# 安装 pgloader 和调试工具
+# - default-mysql-client: 用于测试 MySQL 连接 (mysql -h xxx -u xxx -p)
+# - postgresql-client: 用于测试 PostgreSQL 连接 (psql postgres://xxx)
+RUN apt-get update && \
+    apt-get install -y \
+      pgloader \
+      ca-certificates \
+      default-mysql-client \
+      postgresql-client && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # 复制迁移配置文件
