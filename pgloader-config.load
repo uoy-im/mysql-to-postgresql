@@ -39,9 +39,9 @@ WITH
     uniquify index names,
     
     -- 内存优化：降低批次大小和并发数，避免 Heap exhausted 错误
-    batch rows = 100,
-    batch size = 5MB,
-    workers = 1,
+    batch rows = 1000,
+    batch size = 20MB,
+    workers = 2,
     concurrency = 1
     
 -- ============================================================================
