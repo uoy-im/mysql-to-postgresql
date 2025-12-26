@@ -35,6 +35,7 @@ printf '%s\n' "$template" > "$TMP_LOAD_FILE"
 # ---------- 执行 pgloader ----------
 echo "▶ Starting pgloader migration..."
 # MySQL SSL 证书验证失败（AWS RDS 使用自签名证书）。需要在运行 pgloader 时添加 --no-ssl-cert-verification 参数。
-pgloader --no-ssl-cert-verification "$TMP_LOAD_FILE"
+# --dynamic-space-size: 设置 SBCL 堆内存大小（单位 MB），默认约 1GB，大数据集需要更多（Heap exhausted during garbage collection）
+pgloader --no-ssl-cert-verification --dynamic-space-size 4096 "$TMP_LOAD_FILE"
 
 rm -f "$TMP_LOAD_FILE"
