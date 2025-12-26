@@ -35,11 +35,56 @@ required_vars=(
 CONFIG_DIR="/app"
 BASE_CONFIG="${CONFIG_DIR}/pgloader-config-base.load"
 
-# 定义每批要迁移的表
-BATCH_2='~/^pipeline_snapshot$/'
-BATCH_3='~/^pipeline_result_snippet$/'
-BATCH_4='~/^pipeline_result_event$/, ~/^project_data$/, ~/^project_index$/, ~/^pipeline$/'
-BATCH_5_EXCLUDE='~/^text_content$/, ~/^pipeline_snapshot$/, ~/^pipeline_result_snippet$/, ~/^pipeline_result_event$/, ~/^project_data$/, ~/^project_index$/, ~/^pipeline$/, ~/^dbpaas_upsert_record$/'
+# ============================================================================
+# 分批配置（每个表名只定义一次）
+# ============================================================================
+# 第1批：text_content 太大，手动迁移，这里不处理
+# 始终排除的表
+ALWAYS_EXCLUDE=("text_content" "dbpaas_upsert_record")
+
+# 第2批：大表 (455MB)
+BATCH_2_TABLES=("pipeline_snapshot")
+BATCH_2_DESC="大表 (455MB)"
+
+# 第3批：大表 (397MB)
+BATCH_3_TABLES=("pipeline_result_snippet")
+BATCH_3_DESC="大表 (397MB)"
+
+# 第4批：中大表 (~180MB)
+BATCH_4_TABLES=("pipeline_result_event" "project_data" "project_index" "pipeline")
+BATCH_4_DESC="中大表 (~180MB)"
+
+# 第5批：剩余所有小表（自动计算需要排除的表）
+BATCH_5_DESC="剩余所有小表 (~170MB)"
+
+# ============================================================================
+# 工具函数
+# ============================================================================
+
+# 将表名数组转换为 pgloader 正则表达式格式
+# 例如: ("a" "b") -> "~/^a$/, ~/^b$/"
+tables_to_regex() {
+    local tables=("$@")
+    local result=""
+    for table in "${tables[@]}"; do
+        if [[ -n "$result" ]]; then
+            result+=", "
+        fi
+        result+="~/^${table}\$/"
+    done
+    echo "$result"
+}
+
+# 获取批次的表名（用于显示）
+get_batch_tables_display() {
+    local batch=$1
+    case $batch in
+        2) echo "${BATCH_2_TABLES[*]}" ;;
+        3) echo "${BATCH_3_TABLES[*]}" ;;
+        4) echo "${BATCH_4_TABLES[*]}" ;;
+        5) echo "剩余所有小表" ;;
+    esac
+}
 
 # 校验环境变量
 check_env_vars() {
@@ -84,20 +129,22 @@ generate_config() {
     local batch_comment=""
     case $batch in
         2)
-            batch_comment="-- 第2批：pipeline_snapshot (455MB)"
-            table_filter="INCLUDING ONLY TABLE NAMES MATCHING ${BATCH_2}"
+            batch_comment="-- 第2批：${BATCH_2_DESC}"
+            table_filter="INCLUDING ONLY TABLE NAMES MATCHING $(tables_to_regex "${BATCH_2_TABLES[@]}")"
             ;;
         3)
-            batch_comment="-- 第3批：pipeline_result_snippet (397MB)"
-            table_filter="INCLUDING ONLY TABLE NAMES MATCHING ${BATCH_3}"
+            batch_comment="-- 第3批：${BATCH_3_DESC}"
+            table_filter="INCLUDING ONLY TABLE NAMES MATCHING $(tables_to_regex "${BATCH_3_TABLES[@]}")"
             ;;
         4)
-            batch_comment="-- 第4批：中大表 (~180MB)"
-            table_filter="INCLUDING ONLY TABLE NAMES MATCHING ${BATCH_4}"
+            batch_comment="-- 第4批：${BATCH_4_DESC}"
+            table_filter="INCLUDING ONLY TABLE NAMES MATCHING $(tables_to_regex "${BATCH_4_TABLES[@]}")"
             ;;
         5)
-            batch_comment="-- 第5批：剩余所有小表 (~170MB)"
-            table_filter="EXCLUDING TABLE NAMES MATCHING ${BATCH_5_EXCLUDE}"
+            batch_comment="-- 第5批：${BATCH_5_DESC}"
+            # 第5批排除：始终排除的表 + 第2-4批的表
+            local exclude_tables=("${ALWAYS_EXCLUDE[@]}" "${BATCH_2_TABLES[@]}" "${BATCH_3_TABLES[@]}" "${BATCH_4_TABLES[@]}")
+            table_filter="EXCLUDING TABLE NAMES MATCHING $(tables_to_regex "${exclude_tables[@]}")"
             ;;
     esac
     
@@ -155,6 +202,16 @@ run_batch() {
     fi
 }
 
+# 显示帮助信息
+show_help() {
+    echo -e "${RED}用法: $0 {all|2|3|4|5}${NC}"
+    echo "  all - 执行所有批次"
+    echo "  2   - 第2批: ${BATCH_2_TABLES[*]} (${BATCH_2_DESC})"
+    echo "  3   - 第3批: ${BATCH_3_TABLES[*]} (${BATCH_3_DESC})"
+    echo "  4   - 第4批: ${BATCH_4_TABLES[*]} (${BATCH_4_DESC})"
+    echo "  5   - 第5批: ${BATCH_5_DESC}"
+}
+
 # 主函数
 main() {
     local target=${1:-"all"}
@@ -190,12 +247,7 @@ main() {
             run_batch $target
             ;;
         *)
-            echo -e "${RED}用法: $0 {all|2|3|4|5}${NC}"
-            echo "  all - 执行所有批次"
-            echo "  2   - 第2批: pipeline_snapshot"
-            echo "  3   - 第3批: pipeline_result_snippet"
-            echo "  4   - 第4批: pipeline_result_event, project_data, project_index, pipeline"
-            echo "  5   - 第5批: 剩余所有小表"
+            show_help
             exit 1
             ;;
     esac
