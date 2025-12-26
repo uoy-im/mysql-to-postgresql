@@ -37,14 +37,17 @@ WITH
     
     -- 删除该目标架构（非默认）
     drop schema,
-    -- 假设表的数据有10G,其中有一个content_text大表有3G
-    batch rows = 2000,
-    batch size = 50MB,
-    workers = 4,
-    concurrency = 4
+    -- 内存优化：降低批次大小和并发数，避免 Heap exhausted 错误
+    batch rows = 1000,
+    batch size = 20MB,
+    workers = 2,
+    concurrency = 1
     
 -- 只迁移指定的表（多个表时逗号分隔）
-INCLUDING ONLY TABLE NAMES MATCHING 'dbpaas_sql_record'
+INCLUDING TABLE NAMES MATCHING 'dbpaas_sql_record'
+
+-- 排除的表（多个表时逗号分隔）
+EXCLUDING TABLE NAMES MATCHING 'dbpaas_upsert_record'
 
 -- pgloader 默认会把 MySQL 数据库名作为 PostgreSQL 的 schema 名。可以通过下面这个把数据迁移到 public
 ALTER SCHEMA '${MYSQL_DB}' RENAME TO 'public'
