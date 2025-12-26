@@ -42,6 +42,7 @@ RUN apt-get update && apt-get install -y \
     libzip4 \
     default-mysql-client \
     postgresql-client \
+    nano \
     && rm -rf /var/lib/apt/lists/*
 
 # 从构建阶段复制编译好的 pgloader
