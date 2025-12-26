@@ -19,11 +19,12 @@ WITH
     -- 分表迁移 / 断点重跑 | 会把之前成功的表数据清掉      | 可保留之前已迁的数据，只导剩下的
     -- 增量 / 补数据      | 不适合               | 可以只追加缺失的数据（前提：幂等）
     -- ============================================================================
-    no truncate,
+    -- 分批迁移时用 truncate，确保重跑时数据干净
+    truncate,
     -- 创建表结构（默认）
     create tables,
-    -- 删除目标库中的表（默认）
-    include drop,
+    -- 分批迁移时不要 drop，否则会删掉之前迁移的表！
+    include no drop,
     -- 创建索引（默认）（针对 PostgreSQL 数据库创建相同的索引定义集）
     create indexes,
     -- 重置序列（默认）（确保自增ID从正确的值开始）
@@ -43,11 +44,29 @@ WITH
     workers = 2,
     concurrency = 1
     
--- 只迁移指定的表（多个表时逗号分隔）
-INCLUDING TABLE NAMES MATCHING 'dbpaas_sql_record'
+-- ============================================================================
+-- 分批迁移配置（每次只启用一批，其他注释掉）
+-- ============================================================================
 
--- 排除的表（多个表时逗号分隔）
-EXCLUDING TABLE NAMES MATCHING 'dbpaas_upsert_record'
+-- 第1批：超大表 (1.4GB)
+INCLUDING ONLY TABLE NAMES MATCHING ~/^text_content$/
+
+-- 第2批：大表 (455MB)
+-- INCLUDING ONLY TABLE NAMES MATCHING ~/^pipeline_snapshot$/
+
+-- 第3批：大表 (397MB)
+-- INCLUDING ONLY TABLE NAMES MATCHING ~/^pipeline_result_snippet$/
+
+-- 第4批：中大表 (~180MB)
+-- INCLUDING ONLY TABLE NAMES MATCHING ~/^pipeline_result_event$/, ~/^project_data$/, ~/^project_index$/, ~/^pipeline$/
+
+-- 第5批：剩余所有小表 (~170MB)
+-- EXCLUDING TABLE NAMES MATCHING ~/^text_content$/, ~/^pipeline_snapshot$/, ~/^pipeline_result_snippet$/, ~/^pipeline_result_event$/, ~/^project_data$/, ~/^project_index$/, ~/^pipeline$/
+
+-- ============================================================================
+-- 始终排除的表（不迁移）
+-- ============================================================================
+EXCLUDING TABLE NAMES MATCHING ~/^dbpaas_upsert_record$/
 
 -- pgloader 默认会把 MySQL 数据库名作为 PostgreSQL 的 schema 名。可以通过下面这个把数据迁移到 public
 ALTER SCHEMA '${MYSQL_DB}' RENAME TO 'public'
