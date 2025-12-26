@@ -28,20 +28,20 @@ WITH
     -- 创建索引（默认）（针对 PostgreSQL 数据库创建相同的索引定义集）
     create indexes,
     -- 重置序列（默认）（确保自增ID从正确的值开始）
+    -- ⚠️ 分批迁移时：每批都会重置当前批次表的序列，通常没问题
+    -- 但如果多个表共享序列（少见），可能需要最后一批迁移后手动调整
     reset sequences,
-    -- 创建外键约束（默认）
+    -- 创建外键约束（默认）分批迁移外键可能丢失，但是此次的迁移数据没有定义过外键约束
     foreign keys,
     -- 将标识符转为小写（默认）（只有在你“强依赖大小写标识符”的场景，才需要关闭）
     downcase identifiers,
     -- 使索引名称唯一(默认)（索引名称必须在每个模式中是唯一的，默认加idx_oid前缀修改索引名称）
     uniquify index names,
     
-    -- 删除该目标架构（非默认）
-    drop schema,
     -- 内存优化：降低批次大小和并发数，避免 Heap exhausted 错误
-    batch rows = 1000,
-    batch size = 20MB,
-    workers = 2,
+    batch rows = 100,
+    batch size = 5MB,
+    workers = 1,
     concurrency = 1
     
 -- ============================================================================
@@ -65,10 +65,6 @@ INCLUDING ONLY TABLE NAMES MATCHING ~/^pipeline_snapshot$/
 -- 第5批：剩余所有小表 (~170MB)
 -- EXCLUDING TABLE NAMES MATCHING ~/^text_content$/, ~/^pipeline_snapshot$/, ~/^pipeline_result_snippet$/, ~/^pipeline_result_event$/, ~/^project_data$/, ~/^project_index$/, ~/^pipeline$/
 
--- ============================================================================
--- 始终排除的表（不迁移）
--- ============================================================================
-EXCLUDING TABLE NAMES MATCHING ~/^dbpaas_upsert_record$/
 
 -- ============================================================================
 -- text_content 手动迁移命令（在 pgloader 完成后执行）：
@@ -81,9 +77,6 @@ EXCLUDING TABLE NAMES MATCHING ~/^dbpaas_upsert_record$/
 --   -N -e "SELECT id, content FROM text_content" | \
 --   psql "$PG_CONN" -c "COPY text_content(id, content) FROM STDIN WITH (FORMAT text)"
 -- ============================================================================
-
--- pgloader 默认会把 MySQL 数据库名作为 PostgreSQL 的 schema 名。可以通过下面这个把数据迁移到 public
-ALTER SCHEMA '${MYSQL_DB}' RENAME TO 'public'
 
 
 -- ============================================================================
