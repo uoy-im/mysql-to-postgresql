@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ============================================================================
 # 分批迁移脚本
 # 用法:
@@ -9,7 +9,7 @@
 #   ./run-batch-migration.sh 5       # 只执行第5批
 # ============================================================================
 
-set -e
+set -euo pipefail
 
 # 颜色输出
 RED='\033[0;31m'
@@ -17,32 +17,67 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# PostgreSQL 连接字符串（用于清理连接池）
-PG_CONN="postgresql://${PG_USER}:endpoint=${PG_ENDPOINT_ID};${PG_PASSWORD}@${PG_ENDPOINT_ID}.${PG_REGION}.aws.neon.tech/${PG_DB}?sslmode=require"
+# 必需的环境变量
+required_vars=(
+  MYSQL_DB
+  MYSQL_HOST
+  MYSQL_PASSWORD
+  MYSQL_PORT
+  MYSQL_USER
+  PG_DB
+  PG_ENDPOINT_ID
+  PG_PASSWORD
+  PG_REGION
+  PG_USER
+)
 
 # 配置文件目录
 CONFIG_DIR="/app"
 BASE_CONFIG="${CONFIG_DIR}/pgloader-config-base.load"
 
 # 定义每批要迁移的表
-BATCH_1="~/^text_content$/" # text_content 表太大，单独迁移
-BATCH_2="~/^pipeline_snapshot$/"
-BATCH_3="~/^pipeline_result_snippet$/"
-BATCH_4="~/^pipeline_result_event$/, ~/^project_data$/, ~/^project_index$/, ~/^pipeline$/"
-BATCH_5_EXCLUDE="~/^text_content$/, ~/^pipeline_snapshot$/, ~/^pipeline_result_snippet$/, ~/^pipeline_result_event$/, ~/^project_data$/, ~/^project_index$/, ~/^pipeline$/, ~/^dbpaas_upsert_record$/"
+BATCH_2='~/^pipeline_snapshot$/'
+BATCH_3='~/^pipeline_result_snippet$/'
+BATCH_4='~/^pipeline_result_event$/, ~/^project_data$/, ~/^project_index$/, ~/^pipeline$/'
+BATCH_5_EXCLUDE='~/^text_content$/, ~/^pipeline_snapshot$/, ~/^pipeline_result_snippet$/, ~/^pipeline_result_event$/, ~/^project_data$/, ~/^project_index$/, ~/^pipeline$/, ~/^dbpaas_upsert_record$/'
+
+# 校验环境变量
+check_env_vars() {
+    for var in "${required_vars[@]}"; do
+        value="${!var:-}"
+        if [[ -z "$value" ]]; then
+            echo -e "${RED}❌ Missing required env var: $var${NC}" >&2
+            exit 1
+        fi
+    done
+}
+
+# 替换模板中的环境变量（参考 run-pgloader.sh）
+substitute_env_vars() {
+    local template="$1"
+    for var in "${required_vars[@]}"; do
+        value="${!var:-}"
+        template="${template//\$\{$var\}/$value}"
+    done
+    echo "$template"
+}
+
+# PostgreSQL 连接字符串（用于清理连接池）
+get_pg_conn() {
+    echo "postgresql://${PG_USER}:endpoint=${PG_ENDPOINT_ID};${PG_PASSWORD}@${PG_ENDPOINT_ID}.${PG_REGION}.aws.neon.tech/${PG_DB}?sslmode=require"
+}
 
 # 清理连接池
 cleanup_connections() {
     echo -e "${YELLOW}▶ 清理连接池中的残留连接...${NC}"
-    psql "${PG_CONN}" -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid != pg_backend_pid();" 2>/dev/null || true
+    local pg_conn=$(get_pg_conn)
+    psql "${pg_conn}" -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid != pg_backend_pid();" 2>/dev/null || true
     sleep 2
 }
 
 # 生成配置文件
 generate_config() {
     local batch=$1
-    local config_file="${CONFIG_DIR}/pgloader-batch${batch}.load"
-    local temp_file="${CONFIG_DIR}/pgloader-batch${batch}.tmp"
     
     # 根据批次生成表过滤条件
     local table_filter=""
@@ -66,25 +101,29 @@ generate_config() {
             ;;
     esac
     
-    # 使用 sed 替换占位符，在 "表过滤条件" 注释后插入实际的过滤条件
-    sed "s|-- 表过滤条件（由脚本动态添加）|-- 表过滤条件（由脚本动态添加）\n${batch_comment}\n${table_filter}|" \
-        "${BASE_CONFIG}" > "${temp_file}"
+    # 读取基础配置模板
+    local template
+    template="$(cat "${BASE_CONFIG}")"
+    
+    # 替换占位符，插入表过滤条件
+    template="${template//-- 表过滤条件（由脚本动态添加）/${batch_comment}
+${table_filter}}"
     
     # 添加验证 SQL
-    echo "" >> "${temp_file}"
-    echo "-- ============================================================================" >> "${temp_file}"
-    echo "-- 迁移后执行的 SQL（验证迁移结果）" >> "${temp_file}"
-    echo "-- ============================================================================" >> "${temp_file}"
-    echo "" >> "${temp_file}"
-    echo "AFTER LOAD DO" >> "${temp_file}"
-    echo "    \$\$ SELECT 'Batch ${batch} completed. Tables in public: ' || COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'; \$\$;" >> "${temp_file}"
+    template="${template}
+
+AFTER LOAD DO
+    \$\$ SELECT 'Batch ${batch} completed. Tables in public: ' || COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'; \$\$;"
     
     # 替换环境变量
-    envsubst '${MYSQL_USER} ${MYSQL_PASSWORD} ${MYSQL_HOST} ${MYSQL_PORT} ${MYSQL_DB} ${PG_USER} ${PG_PASSWORD} ${PG_ENDPOINT_ID} ${PG_REGION} ${PG_DB}' \
-        < "${temp_file}" > "${config_file}"
-    rm -f "${temp_file}"
+    template=$(substitute_env_vars "$template")
     
-    echo "${config_file}"
+    # 写入临时文件
+    local config_file
+    config_file="$(mktemp)"
+    printf '%s\n' "$template" > "$config_file"
+    
+    echo "$config_file"
 }
 
 # 执行单批迁移
@@ -99,16 +138,19 @@ run_batch() {
     cleanup_connections
     
     # 生成配置文件
-    local config_file=$(generate_config $batch)
+    local config_file
+    config_file=$(generate_config $batch)
     echo -e "${YELLOW}▶ 配置文件: ${config_file}${NC}"
     
     # 执行迁移
     echo -e "${YELLOW}▶ 开始 pgloader 迁移...${NC}"
-    if pgloader "${config_file}"; then
+    if pgloader --no-ssl-cert-verification --dynamic-space-size 4096 "${config_file}"; then
         echo -e "${GREEN}✓ 第 ${batch} 批迁移成功！${NC}"
+        rm -f "${config_file}"
         return 0
     else
         echo -e "${RED}✗ 第 ${batch} 批迁移失败！${NC}"
+        echo -e "${YELLOW}配置文件保留在: ${config_file}${NC}"
         return 1
     fi
 }
@@ -121,10 +163,12 @@ main() {
     echo -e "${GREEN}   MySQL -> PostgreSQL 分批迁移脚本${NC}"
     echo -e "${GREEN}============================================${NC}"
     
+    # 校验环境变量
+    check_env_vars
+    
     # 检查基础配置文件是否存在
     if [[ ! -f "${BASE_CONFIG}" ]]; then
         echo -e "${RED}错误: 基础配置文件 ${BASE_CONFIG} 不存在${NC}"
-        echo -e "${YELLOW}请先运行: ./create-base-config.sh${NC}"
         exit 1
     fi
     
@@ -158,4 +202,3 @@ main() {
 }
 
 main "$@"
-
