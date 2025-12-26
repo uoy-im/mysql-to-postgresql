@@ -42,6 +42,7 @@ cleanup_connections() {
 generate_config() {
     local batch=$1
     local config_file="${CONFIG_DIR}/pgloader-batch${batch}.load"
+    local temp_file="${CONFIG_DIR}/pgloader-batch${batch}.tmp"
     
     # 根据批次生成表过滤条件
     local table_filter=""
@@ -67,16 +68,21 @@ generate_config() {
     
     # 使用 sed 替换占位符，在 "表过滤条件" 注释后插入实际的过滤条件
     sed "s|-- 表过滤条件（由脚本动态添加）|-- 表过滤条件（由脚本动态添加）\n${batch_comment}\n${table_filter}|" \
-        "${BASE_CONFIG}" > "${config_file}"
+        "${BASE_CONFIG}" > "${temp_file}"
     
     # 添加验证 SQL
-    echo "" >> "${config_file}"
-    echo "-- ============================================================================" >> "${config_file}"
-    echo "-- 迁移后执行的 SQL（验证迁移结果）" >> "${config_file}"
-    echo "-- ============================================================================" >> "${config_file}"
-    echo "" >> "${config_file}"
-    echo "AFTER LOAD DO" >> "${config_file}"
-    echo "    \$\$ SELECT 'Batch ${batch} completed. Tables in public: ' || COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'; \$\$;" >> "${config_file}"
+    echo "" >> "${temp_file}"
+    echo "-- ============================================================================" >> "${temp_file}"
+    echo "-- 迁移后执行的 SQL（验证迁移结果）" >> "${temp_file}"
+    echo "-- ============================================================================" >> "${temp_file}"
+    echo "" >> "${temp_file}"
+    echo "AFTER LOAD DO" >> "${temp_file}"
+    echo "    \$\$ SELECT 'Batch ${batch} completed. Tables in public: ' || COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'; \$\$;" >> "${temp_file}"
+    
+    # 替换环境变量
+    envsubst '${MYSQL_USER} ${MYSQL_PASSWORD} ${MYSQL_HOST} ${MYSQL_PORT} ${MYSQL_DB} ${PG_USER} ${PG_PASSWORD} ${PG_ENDPOINT_ID} ${PG_REGION} ${PG_DB}' \
+        < "${temp_file}" > "${config_file}"
+    rm -f "${temp_file}"
     
     echo "${config_file}"
 }
