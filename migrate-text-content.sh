@@ -6,6 +6,11 @@ set -euo pipefail
 # 用于迁移超大表，pgloader 会内存溢出，改用 mysql + psql 流式迁移
 # ============================================================================
 
+# 记录开始时间
+START_TIME=$(date +%s)
+echo "▶ 开始迁移 text_content 表 ($(date '+%Y-%m-%d %H:%M:%S'))"
+echo ""
+
 echo "▶ 检查环境变量..."
 
 required_vars=(
@@ -29,8 +34,8 @@ for var in "${required_vars[@]}"; do
 done
 
 # 构建连接字符串
-# 注意：Neon 需要把 endpoint ID 放在密码前面
-PG_CONN="postgresql://${PG_USER}:endpoint=${PG_ENDPOINT_ID};${PG_PASSWORD}@${PG_ENDPOINT_ID}.${PG_REGION}.aws.neon.tech/${PG_DB}?sslmode=require"
+# 注意：psql 使用 options 参数传递 endpoint ID（与 pgloader 格式不同）
+PG_CONN="postgres://${PG_USER}:${PG_PASSWORD}@${PG_ENDPOINT_ID}.${PG_REGION}.aws.neon.tech/${PG_DB}?sslmode=require&options=endpoint%3D${PG_ENDPOINT_ID}"
 
 echo "▶ 测试 PostgreSQL 连接..."
 if ! psql "$PG_CONN" -c "SELECT 1" > /dev/null 2>&1; then
@@ -113,6 +118,16 @@ else
   echo "⚠️  警告：行数不一致，请检查"
 fi
 
+# 计算总耗时
+END_TIME=$(date +%s)
+ELAPSED=$((END_TIME - START_TIME))
+MINUTES=$((ELAPSED / 60))
+SECONDS=$((ELAPSED % 60))
+
 echo ""
+echo "============================================"
 echo "🎉 text_content 表迁移完成！"
+echo "   总耗时: ${MINUTES}分${SECONDS}秒"
+echo "   结束时间: $(date '+%Y-%m-%d %H:%M:%S')"
+echo "============================================"
 
