@@ -90,11 +90,13 @@ TOTAL_ROWS=$(mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_
 echo "   总行数: $TOTAL_ROWS"
 
 # 流式导入：mysql 输出 -> psql COPY 输入（真正的流式，不存临时文件）
+# --quick (-q): 强制流式查询，不缓冲整个结果集到内存（关键！）
 # -N: 不显示列名
 # -B: 批处理模式（tab 分隔）
 # --default-character-set=utf8mb4: 强制 UTF-8 输出
 # iconv -c: 过滤无效 UTF-8 字节（静默丢弃）
 mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" \
+  --quick \
   --default-character-set=utf8mb4 \
   -N -B -e "SELECT id, content, dbctime, dbutime FROM text_content" | \
 iconv -f UTF-8 -t UTF-8 -c | \
