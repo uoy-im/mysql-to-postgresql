@@ -23,8 +23,8 @@ WITH
     truncate,
     -- 创建表结构（默认）
     create tables,
-    -- 分批迁移时不要 drop，否则会删掉之前迁移的表！
-    include no drop,
+    --（默认）
+    include drop,
     -- 创建索引（默认）（针对 PostgreSQL 数据库创建相同的索引定义集）
     create indexes,
     -- 重置序列（默认）（确保自增ID从正确的值开始）
