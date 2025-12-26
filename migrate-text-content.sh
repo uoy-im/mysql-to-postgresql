@@ -55,10 +55,14 @@ echo "✅ MySQL 连接成功"
 # 步骤 1：在 PostgreSQL 创建表结构
 # ============================================================================
 echo "▶ 创建 text_content 表结构..."
+echo "   目标 schema: ${MYSQL_DB}"
 
-psql "$PG_CONN" << 'EOF'
+psql "$PG_CONN" << EOF
+-- 创建 schema（如果不存在）
+CREATE SCHEMA IF NOT EXISTS ${MYSQL_DB};
+
 -- 如果表已存在则跳过
-CREATE TABLE IF NOT EXISTS text_content (
+CREATE TABLE IF NOT EXISTS ${MYSQL_DB}.text_content (
   id bigint PRIMARY KEY,
   content text,
   dbctime timestamp(3) DEFAULT CURRENT_TIMESTAMP,
@@ -66,11 +70,11 @@ CREATE TABLE IF NOT EXISTS text_content (
 );
 
 -- 创建序列（用于后续插入自增）
-CREATE SEQUENCE IF NOT EXISTS text_content_id_seq OWNED BY text_content.id;
-ALTER TABLE text_content ALTER COLUMN id SET DEFAULT nextval('text_content_id_seq');
+CREATE SEQUENCE IF NOT EXISTS ${MYSQL_DB}.text_content_id_seq OWNED BY ${MYSQL_DB}.text_content.id;
+ALTER TABLE ${MYSQL_DB}.text_content ALTER COLUMN id SET DEFAULT nextval('${MYSQL_DB}.text_content_id_seq');
 
 -- 清空表（如果重跑脚本）
-TRUNCATE TABLE text_content;
+TRUNCATE TABLE ${MYSQL_DB}.text_content;
 EOF
 
 echo "✅ 表结构创建完成"
@@ -88,9 +92,53 @@ echo "   总行数: $TOTAL_ROWS"
 # 流式导入：mysql 输出 -> psql COPY 输入
 # -N: 不显示列名
 # -B: 批处理模式（tab 分隔）
+# --default-character-set=utf8mb4: 强制 UTF-8 输出
+# iconv: 过滤掉无效的 UTF-8 字节（-c 忽略无法转换的字符）
+
+# 先导出数据到临时文件，方便检测
+TMP_MYSQL_DATA=$(mktemp)
+TMP_CLEAN_DATA=$(mktemp)
+
+echo "   导出 MySQL 数据..."
 mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" \
-  -N -B -e "SELECT id, content, dbctime, dbutime FROM text_content" | \
-psql "$PG_CONN" -c "COPY text_content(id, content, dbctime, dbutime) FROM STDIN WITH (FORMAT text)"
+  --default-character-set=utf8mb4 \
+  -N -B -e "SELECT id, content, dbctime, dbutime FROM text_content" > "$TMP_MYSQL_DATA"
+
+MYSQL_SIZE=$(wc -c < "$TMP_MYSQL_DATA")
+echo "   MySQL 导出大小: $(numfmt --to=iec $MYSQL_SIZE)"
+
+echo "   清理无效 UTF-8 字符..."
+iconv -f UTF-8 -t UTF-8 -c < "$TMP_MYSQL_DATA" > "$TMP_CLEAN_DATA"
+
+CLEAN_SIZE=$(wc -c < "$TMP_CLEAN_DATA")
+LOST_BYTES=$((MYSQL_SIZE - CLEAN_SIZE))
+
+if [[ $LOST_BYTES -gt 0 ]]; then
+  echo "   ⚠️  丢弃了 $LOST_BYTES 字节无效数据 ($(echo "scale=4; $LOST_BYTES * 100 / $MYSQL_SIZE" | bc)%)"
+  
+  # 找出被丢弃的字符（最多显示前 20 个）
+  echo ""
+  echo "   被丢弃的字符（十六进制）:"
+  # 使用 cmp 找出差异位置，然后用 xxd 显示
+  diff <(xxd "$TMP_MYSQL_DATA") <(xxd "$TMP_CLEAN_DATA") | grep "^<" | head -20 | while read line; do
+    echo "   $line"
+  done
+  echo ""
+  
+  # 统计无效字节分布
+  echo "   无效字节统计:"
+  # 找出所有非 UTF-8 字节
+  cat "$TMP_MYSQL_DATA" | LC_ALL=C grep -oP '[\x80-\xff]' | sort | uniq -c | sort -rn | head -10
+  echo ""
+else
+  echo "   ✅ 没有丢弃任何数据"
+fi
+
+echo "   导入到 PostgreSQL..."
+psql "$PG_CONN" -c "COPY ${MYSQL_DB}.text_content(id, content, dbctime, dbutime) FROM STDIN WITH (FORMAT text)" < "$TMP_CLEAN_DATA"
+
+# 清理临时文件
+rm -f "$TMP_MYSQL_DATA" "$TMP_CLEAN_DATA"
 
 echo "✅ 数据导入完成"
 
@@ -99,7 +147,7 @@ echo "✅ 数据导入完成"
 # ============================================================================
 echo "▶ 重置序列起始值..."
 
-psql "$PG_CONN" -c "SELECT setval('text_content_id_seq', (SELECT COALESCE(MAX(id), 1) FROM text_content));"
+psql "$PG_CONN" -c "SELECT setval('${MYSQL_DB}.text_content_id_seq', (SELECT COALESCE(MAX(id), 1) FROM ${MYSQL_DB}.text_content));"
 
 echo "✅ 序列重置完成"
 
@@ -108,7 +156,7 @@ echo "✅ 序列重置完成"
 # ============================================================================
 echo "▶ 验证迁移结果..."
 
-PG_COUNT=$(psql "$PG_CONN" -t -c "SELECT COUNT(*) FROM text_content" | tr -d ' ')
+PG_COUNT=$(psql "$PG_CONN" -t -c "SELECT COUNT(*) FROM ${MYSQL_DB}.text_content" | tr -d ' ')
 echo "   MySQL 行数: $TOTAL_ROWS"
 echo "   PostgreSQL 行数: $PG_COUNT"
 
