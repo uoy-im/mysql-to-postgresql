@@ -46,13 +46,15 @@ WITH
     
 -- ============================================================================
 -- 分批迁移配置（每次只启用一批，其他注释掉）
+-- 1. pgloader 迁移除 text_content 外的所有表（text_content 太大会内存溢出）
+-- 2. text_content 用 mysql + psql 流式迁移（见下方注释的命令）
 -- ============================================================================
 
--- 第1批：超大表 (1.4GB)
-INCLUDING ONLY TABLE NAMES MATCHING ~/^text_content$/
+-- 第1批：超大表 (1.4GB) 改为手动，这里不迁移
+-- INCLUDING ONLY TABLE NAMES MATCHING ~/^text_content$/
 
 -- 第2批：大表 (455MB)
--- INCLUDING ONLY TABLE NAMES MATCHING ~/^pipeline_snapshot$/
+INCLUDING ONLY TABLE NAMES MATCHING ~/^pipeline_snapshot$/
 
 -- 第3批：大表 (397MB)
 -- INCLUDING ONLY TABLE NAMES MATCHING ~/^pipeline_result_snippet$/
@@ -67,6 +69,18 @@ INCLUDING ONLY TABLE NAMES MATCHING ~/^text_content$/
 -- 始终排除的表（不迁移）
 -- ============================================================================
 EXCLUDING TABLE NAMES MATCHING ~/^dbpaas_upsert_record$/
+
+-- ============================================================================
+-- text_content 手动迁移命令（在 pgloader 完成后执行）：
+--
+-- 步骤1：导出表结构并手动在 PostgreSQL 创建（需要转换语法）
+-- mysql -h $MYSQL_HOST -u $MYSQL_USER -p$MYSQL_PASSWORD $MYSQL_DB -e "SHOW CREATE TABLE text_content\G"
+--
+-- 步骤2：流式导入数据
+-- mysql -h $MYSQL_HOST -u $MYSQL_USER -p$MYSQL_PASSWORD $MYSQL_DB \
+--   -N -e "SELECT id, content FROM text_content" | \
+--   psql "$PG_CONN" -c "COPY text_content(id, content) FROM STDIN WITH (FORMAT text)"
+-- ============================================================================
 
 -- pgloader 默认会把 MySQL 数据库名作为 PostgreSQL 的 schema 名。可以通过下面这个把数据迁移到 public
 ALTER SCHEMA '${MYSQL_DB}' RENAME TO 'public'
