@@ -1,0 +1,23 @@
+LOAD DATABASE
+    FROM mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DB}?useSSL=true
+    INTO postgresql://${PG_USER}:endpoint=${PG_ENDPOINT_ID};${PG_PASSWORD}@${PG_ENDPOINT_ID}.${PG_REGION}.aws.neon.tech/${PG_DB}?sslmode=require
+
+WITH
+    truncate,
+    create tables,
+    include drop,
+    create indexes,
+    reset sequences,
+    foreign keys,
+    downcase identifiers,
+    uniquify index names,
+    batch rows = 1000,
+    batch size = 20MB,
+    workers = 2,
+    concurrency = 1
+
+-- 表过滤条件（由脚本动态添加）
+
+CAST
+    type datetime to timestamp,
+    type json to jsonb
