@@ -43,7 +43,7 @@ WITH
     -- batch size = 20MB,
     -- 从数据库源加载时，默认值为 [workers = 4, concurrency = 1]，其他[workers = 8, concurrency = 1]
     -- 同一时刻最多 4 个线程活跃（并行度上限）
-    -- workers = 2,
+    -- workers = 4,
     -- 启动 1 个 writer 任务（总任务 = 1 reader + 1 writer = 2）
     -- concurrency = 1
 
