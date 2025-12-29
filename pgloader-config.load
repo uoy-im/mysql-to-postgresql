@@ -52,7 +52,7 @@ WITH
 -- ============================================================================
 
 SET MySQL PARAMETERS
-    time_zone = '+00:00'
+    time_zone = 'UTC'
 
 SET PostgreSQL PARAMETERS
     timezone to 'UTC'
