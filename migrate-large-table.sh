@@ -37,26 +37,80 @@ if [[ $# -lt 1 ]]; then
 fi
 
 # ============================================================================
-# 内置的 PostgreSQL 建表语句
+# 迁移 text_content 表
 # ============================================================================
-get_create_table_sql() {
-  local table_name="$1"
-  local schema="$2"
+migrate_text_content() {
+  local SCHEMA="$1"
   
-  case "$table_name" in
-    text_content)
-      cat << EOF
-CREATE TABLE IF NOT EXISTS ${schema}.text_content (
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "▶ 开始迁移 text_content 表 ($(date '+%Y-%m-%d %H:%M:%S'))"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  
+  local TABLE_START_TIME=$(date +%s)
+  
+  # 创建表结构
+  echo "▶ 创建表结构..."
+  psql "$PG_CONN" << EOF
+CREATE SCHEMA IF NOT EXISTS ${SCHEMA};
+DROP TABLE IF EXISTS ${SCHEMA}.text_content CASCADE;
+CREATE TABLE ${SCHEMA}.text_content (
   id bigint PRIMARY KEY,
   content text,
   dbctime timestamp(3) DEFAULT CURRENT_TIMESTAMP,
   dbutime timestamp(3) DEFAULT CURRENT_TIMESTAMP
 );
+CREATE SEQUENCE IF NOT EXISTS ${SCHEMA}.text_content_id_seq OWNED BY ${SCHEMA}.text_content.id;
+ALTER TABLE ${SCHEMA}.text_content ALTER COLUMN id SET DEFAULT nextval('${SCHEMA}.text_content_id_seq');
 EOF
-      ;;
-    pipeline_snapshot)
-      cat << EOF
-CREATE TABLE IF NOT EXISTS ${schema}.pipeline_snapshot (
+  echo "✅ 表结构创建完成"
+  
+  # 流式导入数据
+  echo "▶ 开始流式导入数据..."
+  local TOTAL_ROWS=$(mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" \
+    -N -B -e "SELECT COUNT(*) FROM text_content")
+  echo "   总行数: $TOTAL_ROWS"
+  
+  mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" \
+    --quick --default-character-set=utf8mb4 -N -B \
+    -e "SELECT id,content,dbctime,dbutime FROM text_content" | \
+  iconv -f UTF-8 -t UTF-8 -c | \
+  psql "$PG_CONN" -c "COPY ${SCHEMA}.text_content(id,content,dbctime,dbutime) FROM STDIN WITH (FORMAT text)"
+  echo "✅ 数据导入完成"
+  
+  # 重置序列
+  echo "▶ 重置序列..."
+  psql "$PG_CONN" -c "SELECT setval('${SCHEMA}.text_content_id_seq', (SELECT COALESCE(MAX(id), 1) FROM ${SCHEMA}.text_content));"
+  
+  # 验证
+  echo "▶ 验证..."
+  local PG_COUNT=$(psql "$PG_CONN" -t -c "SELECT COUNT(*) FROM ${SCHEMA}.text_content" | tr -d ' ')
+  echo "   MySQL: $TOTAL_ROWS, PostgreSQL: $PG_COUNT"
+  [[ "$TOTAL_ROWS" == "$PG_COUNT" ]] && echo "✅ 成功" || echo "⚠️ 行数不一致"
+  
+  local TABLE_END_TIME=$(date +%s)
+  echo "   耗时: $((TABLE_END_TIME - TABLE_START_TIME))秒"
+}
+
+# ============================================================================
+# 迁移 pipeline_snapshot 表
+# ============================================================================
+migrate_pipeline_snapshot() {
+  local SCHEMA="$1"
+  
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "▶ 开始迁移 pipeline_snapshot 表 ($(date '+%Y-%m-%d %H:%M:%S'))"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  
+  local TABLE_START_TIME=$(date +%s)
+  
+  # 创建表结构
+  echo "▶ 创建表结构..."
+  psql "$PG_CONN" << EOF
+CREATE SCHEMA IF NOT EXISTS ${SCHEMA};
+DROP TABLE IF EXISTS ${SCHEMA}.pipeline_snapshot CASCADE;
+CREATE TABLE ${SCHEMA}.pipeline_snapshot (
   id bigint PRIMARY KEY,
   pipeline_id varchar(20) NOT NULL,
   status varchar(20) NOT NULL DEFAULT 'created',
@@ -71,11 +125,57 @@ CREATE TABLE IF NOT EXISTS ${schema}.pipeline_snapshot (
   dbctime timestamp(3) DEFAULT CURRENT_TIMESTAMP,
   dbutime timestamp(3) DEFAULT CURRENT_TIMESTAMP
 );
+CREATE SEQUENCE IF NOT EXISTS ${SCHEMA}.pipeline_snapshot_id_seq OWNED BY ${SCHEMA}.pipeline_snapshot.id;
+ALTER TABLE ${SCHEMA}.pipeline_snapshot ALTER COLUMN id SET DEFAULT nextval('${SCHEMA}.pipeline_snapshot_id_seq');
 EOF
-      ;;
-    pipeline_result_event)
-      cat << EOF
-CREATE TABLE IF NOT EXISTS ${schema}.pipeline_result_event (
+  echo "✅ 表结构创建完成"
+  
+  # 流式导入数据
+  echo "▶ 开始流式导入数据..."
+  local TOTAL_ROWS=$(mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" \
+    -N -B -e "SELECT COUNT(*) FROM pipeline_snapshot")
+  echo "   总行数: $TOTAL_ROWS"
+  
+  mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" \
+    --quick --default-character-set=utf8mb4 -N -B \
+    -e "SELECT id,pipeline_id,status,visible,last_event_id,llm_virtual_key,tool_token,sandbox_id,agent_pid,result,error_message,dbctime,dbutime FROM pipeline_snapshot" | \
+  iconv -f UTF-8 -t UTF-8 -c | \
+  psql "$PG_CONN" -c "COPY ${SCHEMA}.pipeline_snapshot(id,pipeline_id,status,visible,last_event_id,llm_virtual_key,tool_token,sandbox_id,agent_pid,result,error_message,dbctime,dbutime) FROM STDIN WITH (FORMAT text)"
+  echo "✅ 数据导入完成"
+  
+  # 重置序列
+  echo "▶ 重置序列..."
+  psql "$PG_CONN" -c "SELECT setval('${SCHEMA}.pipeline_snapshot_id_seq', (SELECT COALESCE(MAX(id), 1) FROM ${SCHEMA}.pipeline_snapshot));"
+  
+  # 验证
+  echo "▶ 验证..."
+  local PG_COUNT=$(psql "$PG_CONN" -t -c "SELECT COUNT(*) FROM ${SCHEMA}.pipeline_snapshot" | tr -d ' ')
+  echo "   MySQL: $TOTAL_ROWS, PostgreSQL: $PG_COUNT"
+  [[ "$TOTAL_ROWS" == "$PG_COUNT" ]] && echo "✅ 成功" || echo "⚠️ 行数不一致"
+  
+  local TABLE_END_TIME=$(date +%s)
+  echo "   耗时: $((TABLE_END_TIME - TABLE_START_TIME))秒"
+}
+
+# ============================================================================
+# 迁移 pipeline_result_event 表
+# ============================================================================
+migrate_pipeline_result_event() {
+  local SCHEMA="$1"
+  
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "▶ 开始迁移 pipeline_result_event 表 ($(date '+%Y-%m-%d %H:%M:%S'))"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  
+  local TABLE_START_TIME=$(date +%s)
+  
+  # 创建表结构
+  echo "▶ 创建表结构..."
+  psql "$PG_CONN" << EOF
+CREATE SCHEMA IF NOT EXISTS ${SCHEMA};
+DROP TABLE IF EXISTS ${SCHEMA}.pipeline_result_event CASCADE;
+CREATE TABLE ${SCHEMA}.pipeline_result_event (
   id bigint PRIMARY KEY,
   pipeline_id varchar(64) NOT NULL,
   seq bigint NOT NULL,
@@ -84,104 +184,36 @@ CREATE TABLE IF NOT EXISTS ${schema}.pipeline_result_event (
   dbutime timestamp(3) DEFAULT CURRENT_TIMESTAMP,
   created_ts bigint NOT NULL DEFAULT -1
 );
+CREATE SEQUENCE IF NOT EXISTS ${SCHEMA}.pipeline_result_event_id_seq OWNED BY ${SCHEMA}.pipeline_result_event.id;
+ALTER TABLE ${SCHEMA}.pipeline_result_event ALTER COLUMN id SET DEFAULT nextval('${SCHEMA}.pipeline_result_event_id_seq');
 EOF
-      ;;
-    *)
-      echo "❌ 未知表: $table_name" >&2
-      return 1
-      ;;
-  esac
-}
-
-# 获取表的列名列表
-get_columns() {
-  local table_name="$1"
-  
-  case "$table_name" in
-    text_content)
-      echo "id,content,dbctime,dbutime"
-      ;;
-    pipeline_snapshot)
-      echo "id,pipeline_id,status,visible,last_event_id,llm_virtual_key,tool_token,sandbox_id,agent_pid,result,error_message,dbctime,dbutime"
-      ;;
-    pipeline_result_event)
-      echo "id,pipeline_id,seq,content,dbctime,dbutime,created_ts"
-      ;;
-  esac
-}
-
-# ============================================================================
-# 迁移单个表
-# ============================================================================
-migrate_table() {
-  local TABLE_NAME="$1"
-  
-  echo ""
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "▶ 开始迁移 ${TABLE_NAME} 表 ($(date '+%Y-%m-%d %H:%M:%S'))"
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  
-  local TABLE_START_TIME=$(date +%s)
-  local COLUMNS=$(get_columns "$TABLE_NAME")
-  
-  echo "   列: $COLUMNS"
-  
-  # 步骤 1：创建表结构
-  echo "▶ 创建表结构..."
-  local CREATE_SQL=$(get_create_table_sql "$TABLE_NAME" "$MYSQL_DB")
-  
-  psql "$PG_CONN" << EOF
--- 创建 schema（如果不存在）
-CREATE SCHEMA IF NOT EXISTS ${MYSQL_DB};
-
--- 删除旧表（如果存在）
-DROP TABLE IF EXISTS ${MYSQL_DB}.${TABLE_NAME} CASCADE;
-
--- 创建新表
-${CREATE_SQL}
-
--- 创建序列
-CREATE SEQUENCE IF NOT EXISTS ${MYSQL_DB}.${TABLE_NAME}_id_seq OWNED BY ${MYSQL_DB}.${TABLE_NAME}.id;
-ALTER TABLE ${MYSQL_DB}.${TABLE_NAME} ALTER COLUMN id SET DEFAULT nextval('${MYSQL_DB}.${TABLE_NAME}_id_seq');
-EOF
-  
   echo "✅ 表结构创建完成"
   
-  # 步骤 2：流式导入数据
+  # 流式导入数据
   echo "▶ 开始流式导入数据..."
-  
   local TOTAL_ROWS=$(mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" \
-    -N -B -e "SELECT COUNT(*) FROM \`$TABLE_NAME\`")
+    -N -B -e "SELECT COUNT(*) FROM pipeline_result_event")
   echo "   总行数: $TOTAL_ROWS"
   
   mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" \
-    --quick \
-    --default-character-set=utf8mb4 \
-    -N -B -e "SELECT ${COLUMNS} FROM \`$TABLE_NAME\`" | \
+    --quick --default-character-set=utf8mb4 -N -B \
+    -e "SELECT id,pipeline_id,seq,content,dbctime,dbutime,created_ts FROM pipeline_result_event" | \
   iconv -f UTF-8 -t UTF-8 -c | \
-  psql "$PG_CONN" -c "COPY ${MYSQL_DB}.${TABLE_NAME}(${COLUMNS}) FROM STDIN WITH (FORMAT text)"
-  
+  psql "$PG_CONN" -c "COPY ${SCHEMA}.pipeline_result_event(id,pipeline_id,seq,content,dbctime,dbutime,created_ts) FROM STDIN WITH (FORMAT text)"
   echo "✅ 数据导入完成"
   
-  # 步骤 3：重置序列
-  echo "▶ 重置序列起始值..."
-  psql "$PG_CONN" -c "SELECT setval('${MYSQL_DB}.${TABLE_NAME}_id_seq', (SELECT COALESCE(MAX(id), 1) FROM ${MYSQL_DB}.${TABLE_NAME}));"
+  # 重置序列
+  echo "▶ 重置序列..."
+  psql "$PG_CONN" -c "SELECT setval('${SCHEMA}.pipeline_result_event_id_seq', (SELECT COALESCE(MAX(id), 1) FROM ${SCHEMA}.pipeline_result_event));"
   
   # 验证
-  echo "▶ 验证迁移结果..."
-  local PG_COUNT=$(psql "$PG_CONN" -t -c "SELECT COUNT(*) FROM ${MYSQL_DB}.${TABLE_NAME}" | tr -d ' ')
-  echo "   MySQL 行数: $TOTAL_ROWS"
-  echo "   PostgreSQL 行数: $PG_COUNT"
-  
-  if [[ "$TOTAL_ROWS" == "$PG_COUNT" ]]; then
-    echo "✅ 迁移成功！行数一致"
-  else
-    echo "⚠️  警告：行数不一致，请检查"
-  fi
+  echo "▶ 验证..."
+  local PG_COUNT=$(psql "$PG_CONN" -t -c "SELECT COUNT(*) FROM ${SCHEMA}.pipeline_result_event" | tr -d ' ')
+  echo "   MySQL: $TOTAL_ROWS, PostgreSQL: $PG_COUNT"
+  [[ "$TOTAL_ROWS" == "$PG_COUNT" ]] && echo "✅ 成功" || echo "⚠️ 行数不一致"
   
   local TABLE_END_TIME=$(date +%s)
-  local TABLE_ELAPSED=$((TABLE_END_TIME - TABLE_START_TIME))
-  echo "   耗时: ${TABLE_ELAPSED}秒"
+  echo "   耗时: $((TABLE_END_TIME - TABLE_START_TIME))秒"
 }
 
 # ============================================================================
@@ -215,14 +247,14 @@ PG_CONN="postgres://${PG_USER}:${PG_PASSWORD}@${PG_ENDPOINT_ID}.${PG_REGION}.aws
 
 echo "▶ 测试 PostgreSQL 连接..."
 if ! psql "$PG_CONN" -c "SELECT 1" > /dev/null 2>&1; then
-  echo "❌ PostgreSQL 连接失败，请检查环境变量" >&2
+  echo "❌ PostgreSQL 连接失败" >&2
   exit 1
 fi
 echo "✅ PostgreSQL 连接成功"
 
 echo "▶ 测试 MySQL 连接..."
 if ! mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" -e "SELECT 1" > /dev/null 2>&1; then
-  echo "❌ MySQL 连接失败，请检查环境变量" >&2
+  echo "❌ MySQL 连接失败" >&2
   exit 1
 fi
 echo "✅ MySQL 连接成功"
@@ -233,34 +265,35 @@ START_TIME=$(date +%s)
 # 确定要迁移的表
 TARGET="$1"
 
-if [[ "$TARGET" == "all" ]]; then
-  TABLES_TO_MIGRATE=("${SUPPORTED_TABLES[@]}")
-  echo ""
-  echo "▶ 将迁移所有大表: ${TABLES_TO_MIGRATE[*]}"
-else
-  # 验证表名
-  VALID=false
-  for t in "${SUPPORTED_TABLES[@]}"; do
-    if [[ "$t" == "$TARGET" ]]; then
-      VALID=true
-      break
-    fi
-  done
-  
-  if [[ "$VALID" != "true" ]]; then
-    echo "❌ 不支持的表: $TARGET" >&2
-    echo ""
-    show_usage
-    exit 1
-  fi
-  
-  TABLES_TO_MIGRATE=("$TARGET")
-fi
+migrate_single_table() {
+  local table="$1"
+  case "$table" in
+    text_content)
+      migrate_text_content "$MYSQL_DB"
+      ;;
+    pipeline_snapshot)
+      migrate_pipeline_snapshot "$MYSQL_DB"
+      ;;
+    pipeline_result_event)
+      migrate_pipeline_result_event "$MYSQL_DB"
+      ;;
+    *)
+      echo "❌ 不支持的表: $table" >&2
+      show_usage
+      exit 1
+      ;;
+  esac
+}
 
-# 执行迁移
-for table in "${TABLES_TO_MIGRATE[@]}"; do
-  migrate_table "$table"
-done
+if [[ "$TARGET" == "all" ]]; then
+  echo ""
+  echo "▶ 将迁移所有大表: ${SUPPORTED_TABLES[*]}"
+  for table in "${SUPPORTED_TABLES[@]}"; do
+    migrate_single_table "$table"
+  done
+else
+  migrate_single_table "$TARGET"
+fi
 
 # 计算总耗时
 END_TIME=$(date +%s)
@@ -271,7 +304,6 @@ SECONDS=$((ELAPSED % 60))
 echo ""
 echo "============================================"
 echo "🎉 大表迁移完成！"
-echo "   迁移表: ${TABLES_TO_MIGRATE[*]}"
 echo "   总耗时: ${MINUTES}分${SECONDS}秒"
 echo "   结束时间: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "============================================"
