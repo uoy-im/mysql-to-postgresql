@@ -191,7 +191,7 @@ run_batch() {
     
     # 执行迁移
     echo -e "${YELLOW}▶ 开始 pgloader 迁移...${NC}"
-    if pgloader --no-ssl-cert-verification --dynamic-space-size 4096 "${config_file}"; then
+    if pgloader --no-ssl-cert-verification --dynamic-space-size 16384 "${config_file}"; then
         echo -e "${GREEN}✓ 第 ${batch} 批迁移成功！${NC}"
         rm -f "${config_file}"
         return 0
