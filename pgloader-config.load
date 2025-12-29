@@ -41,7 +41,9 @@ WITH
     -- https://access.crunchydata.com/documentation/pgloader/3.6.8/pgloader/ 文章最后的options
     -- batch rows = 25000,
     -- batch size = 20MB,
+    -- 并行迁移 2 张表，加快整体速度
     workers = 2,
+    -- 每张表单线程读取，避免对 MySQL 造成过大压力
     concurrency = 1
 
 -- ============================================================================
