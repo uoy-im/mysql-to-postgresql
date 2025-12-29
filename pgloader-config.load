@@ -66,11 +66,11 @@ SET PostgreSQL PARAMETERS
 -- 2. text_content 用 mysql + psql 流式迁移（见下方注释的命令）
 -- ============================================================================
 
--- 第1批：超大表 (1.4GB) 改为手动，这里不迁移
+-- 第1批：超大表 (1.4GB)
 -- INCLUDING ONLY TABLE NAMES MATCHING ~/^text_content$/
 
 -- 第2批：大表 (455MB)
-INCLUDING ONLY TABLE NAMES MATCHING ~/^pipeline_snapshot$/
+-- INCLUDING ONLY TABLE NAMES MATCHING ~/^pipeline_snapshot$/
 
 -- 第3批：大表 (397MB)
 -- INCLUDING ONLY TABLE NAMES MATCHING ~/^pipeline_result_snippet$/
@@ -158,8 +158,6 @@ CAST
     --    - dw_user_register_record: register_time
     -- ========================================
     -- type datetime to timestamptz（默认）
-    type datetime to timestamp,
-    
     
     -- ========================================
     -- JSON 类型转换
