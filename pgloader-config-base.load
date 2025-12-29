@@ -4,6 +4,8 @@ LOAD DATABASE
 
 WITH
     truncate,
+    batch rows = 1000,
+    batch size = 20MB,
     workers = 2,
     concurrency = 1
 
