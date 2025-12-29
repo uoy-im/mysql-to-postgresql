@@ -43,6 +43,19 @@ WITH
     batch size = 20MB,
     workers = 2,
     concurrency = 1
+
+-- ============================================================================
+-- 时区配置：确保 timestamp → timestamptz 迁移时数据一致性
+-- MySQL timestamp 内部存储 UTC，读取时会按 session time_zone 转换
+-- PostgreSQL timestamptz 内部存储 UTC，读写时会按 session timezone 转换
+-- 统一设置为 UTC，避免任何隐式时区转换
+-- ============================================================================
+
+SET MySQL PARAMETERS
+    time_zone = '+00:00'
+
+SET PostgreSQL PARAMETERS
+    timezone to 'UTC'
     
 -- ============================================================================
 -- 分批迁移配置（每次只启用一批，其他注释掉）
