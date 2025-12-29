@@ -16,6 +16,12 @@ WITH
     workers = 2,
     concurrency = 1
 
+SET MySQL PARAMETERS
+    time_zone = '+00:00'
+
+SET PostgreSQL PARAMETERS
+    timezone to 'UTC'
+
 -- 表过滤条件（由脚本动态添加）
 
 CAST
