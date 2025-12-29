@@ -38,9 +38,9 @@ WITH
     -- 使索引名称唯一(默认)（索引名称必须在每个模式中是唯一的，默认加idx_oid前缀修改索引名称）
     uniquify index names,
     
-    -- 内存优化：降低批次大小和并发数，避免 Heap exhausted 错误
-    batch rows = 1000,
-    batch size = 20MB,
+    -- https://access.crunchydata.com/documentation/pgloader/3.6.8/pgloader/ 文章最后的options
+    -- batch rows = 25000,
+    -- batch size = 20MB,
     workers = 2,
     concurrency = 1
 
