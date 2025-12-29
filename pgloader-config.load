@@ -41,10 +41,11 @@ WITH
     -- https://access.crunchydata.com/documentation/pgloader/3.6.8/pgloader/ 文章最后的options
     -- batch rows = 25000,
     -- batch size = 20MB,
-    -- 并行迁移 2 张表，加快整体速度
-    workers = 2,
-    -- 每张表单线程读取，避免对 MySQL 造成过大压力
-    concurrency = 1
+    -- 从数据库源加载时，默认值为 [workers = 4, concurrency = 1]，其他[workers = 8, concurrency = 1]
+    -- 同一时刻最多 4 个线程活跃（并行度上限）
+    -- workers = 2,
+    -- 启动 1 个 writer 任务（总任务 = 1 reader + 1 writer = 2）
+    -- concurrency = 1
 
 -- ============================================================================
 -- 时区配置：确保 timestamp → timestamptz 迁移时数据一致性
