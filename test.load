@@ -15,6 +15,8 @@ SET MySQL PARAMETERS
 SET PostgreSQL PARAMETERS
     timezone to 'UTC'
 
+INCLUDING ONLY TABLE NAMES MATCHING ~/^pipeline$/
+
 -- 表过滤条件（由脚本动态添加）
 
 CAST
@@ -24,90 +26,95 @@ CAST
     -- ============================================================================
     -- 毫秒级 bigint 时间戳转换为 timestamptz
     -- 使用自定义函数: unix-timestamp-ms-to-timestamptz (0/-1 转为 NULL)
-    -- 使用自定义函数: unix-timestamp-ms-to-timestamptz-allow-zero (0 保留为 1970-01-01)
     -- 运行命令: pgloader --load-lisp-file ms-transforms.lisp config.load
+    -- 
+    -- 注意: 所有 NOT NULL 字段都需要 drop not null，因为 0/-1 会被转换为 NULL
     -- ============================================================================
     
-    -- chat_session
-    column chat_session.deleted_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
-    column chat_session.created_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
-    column chat_session.updated_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- chat_session (deleted_ts/created_ts/updated_ts: NOT NULL DEFAULT '-1')
+    column chat_session.deleted_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
+    column chat_session.created_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
+    column chat_session.updated_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
     -- pipeline (heartbeat_ts 保持 bigint)
-    column pipeline.start_process_time to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- start_process_time: NOT NULL DEFAULT '0'
+    -- end_process_time: DEFAULT '0' (可为 NULL，但转换后也可能是 NULL)
+    -- created_ts: NOT NULL DEFAULT '-1'
+    column pipeline.start_process_time to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     column pipeline.end_process_time to timestamptz using unix-timestamp-ms-to-timestamptz,
-    column pipeline.created_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    column pipeline.created_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- pipeline_result_event
-    column pipeline_result_event.created_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- pipeline_result_event (created_ts: NOT NULL DEFAULT '-1')
+    column pipeline_result_event.created_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
     -- pipeline_step (duration 保持 bigint，表示时间长度)
-    column pipeline_step.created_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- created_ts: NOT NULL DEFAULT '-1'
+    column pipeline_step.created_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- project
-    column project.deleted_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
-    column project.created_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
-    column project.updated_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- project (deleted_ts/created_ts/updated_ts: NOT NULL DEFAULT '-1')
+    column project.deleted_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
+    column project.created_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
+    column project.updated_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- project_data
-    column project_data.deleted_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
-    column project_data.created_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- project_data (deleted_ts/created_ts: NOT NULL DEFAULT '-1')
+    column project_data.deleted_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
+    column project_data.created_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- project_github_repo_binding
-    column project_github_repo_binding.created_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
-    column project_github_repo_binding.updated_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- project_github_repo_binding (created_ts/updated_ts: NOT NULL DEFAULT '-1')
+    column project_github_repo_binding.created_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
+    column project_github_repo_binding.updated_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- project_index
-    column project_index.created_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
-    column project_index.updated_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- project_index (created_ts: NOT NULL, updated_ts: NOT NULL DEFAULT '0')
+    column project_index.created_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
+    column project_index.updated_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- project_index_v2
-    column project_index_v2.created_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
-    column project_index_v2.updated_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- project_index_v2 (created_ts/updated_ts: NOT NULL)
+    column project_index_v2.created_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
+    column project_index_v2.updated_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- user_github_installation
-    column user_github_installation.created_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
-    column user_github_installation.updated_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- user_github_installation (created_ts/updated_ts: NOT NULL DEFAULT '-1')
+    column user_github_installation.created_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
+    column user_github_installation.updated_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- user_third_party_auth
-    column user_third_party_auth.created_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
-    column user_third_party_auth.updated_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- user_third_party_auth (created_ts/updated_ts: NOT NULL)
+    column user_third_party_auth.created_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
+    column user_third_party_auth.updated_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- gitea_backup_tasks
-    column gitea_backup_tasks.updated_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- gitea_backup_tasks (updated_ts: NOT NULL)
+    column gitea_backup_tasks.updated_ts to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- fulfill_ai_credit_change_log
-    column fulfill_ai_credit_change_log.op_time to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- fulfill_ai_credit_change_log (op_time: NOT NULL)
+    column fulfill_ai_credit_change_log.op_time to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- fulfill_ai_credit_usage_log
-    column fulfill_ai_credit_usage_log.op_time to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- fulfill_ai_credit_usage_log (op_time: NOT NULL)
+    column fulfill_ai_credit_usage_log.op_time to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- fulfill_ai_credit
-    column fulfill_ai_credit.start_time to timestamptz using unix-timestamp-ms-to-timestamptz,
-    column fulfill_ai_credit.end_time to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- fulfill_ai_credit (start_time/end_time: NOT NULL)
+    column fulfill_ai_credit.start_time to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
+    column fulfill_ai_credit.end_time to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- fulfill_ai_free_credit_distribution_log
-    column fulfill_ai_free_credit_distribution_log.begin_time to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- fulfill_ai_free_credit_distribution_log (begin_time: NOT NULL)
+    column fulfill_ai_free_credit_distribution_log.begin_time to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- stripe_subscription
-    column stripe_subscription.start_time to timestamptz using unix-timestamp-ms-to-timestamptz,
-    column stripe_subscription.current_period_start to timestamptz using unix-timestamp-ms-to-timestamptz,
-    column stripe_subscription.current_period_end to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- stripe_subscription (start_time/current_period_start/current_period_end: NOT NULL)
+    column stripe_subscription.start_time to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
+    column stripe_subscription.current_period_start to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
+    column stripe_subscription.current_period_end to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- user_account_delete_record (NOT NULL DEFAULT 0; 0 表示未删除 → NULL，>0 表示删除时间)
+    -- user_account_delete_record (delete_marker: NOT NULL DEFAULT 0; 0 表示未删除 → NULL)
     column user_account_delete_record.delete_marker to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- pipeline_v2
-    column pipeline_v2.created_at to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- pipeline_v2 (created_at: NOT NULL)
+    column pipeline_v2.created_at to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- pipeline_result_snippet
-    column pipeline_result_snippet.generated_at to timestamptz using unix-timestamp-ms-to-timestamptz,
-    column pipeline_result_snippet.created_at to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- pipeline_result_snippet (generated_at/created_at: NOT NULL)
+    column pipeline_result_snippet.generated_at to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
+    column pipeline_result_snippet.created_at to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- pipeline_event
-    column pipeline_event.generated_at to timestamptz using unix-timestamp-ms-to-timestamptz,
-    column pipeline_event.created_at to timestamptz using unix-timestamp-ms-to-timestamptz,
+    -- pipeline_event (generated_at/created_at: NOT NULL)
+    column pipeline_event.generated_at to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
+    column pipeline_event.created_at to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
-    -- pipeline_feedback
-    column pipeline_feedback.feedback_at to timestamptz using unix-timestamp-ms-to-timestamptz
+    -- pipeline_feedback (feedback_at: NOT NULL)
+    column pipeline_feedback.feedback_at to timestamptz drop not null using unix-timestamp-ms-to-timestamptz
 ;
