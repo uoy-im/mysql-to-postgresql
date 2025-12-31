@@ -15,9 +15,6 @@ SET MySQL PARAMETERS
 SET PostgreSQL PARAMETERS
     timezone to 'UTC'
 
-INCLUDING ONLY TABLE NAMES MATCHING ~/^pipeline$/
--- EXCLUDING TABLE NAMES MATCHING ~/^text_content$/, ~/^dbpass_upsert_record$/
-
 -- 表过滤条件（由脚本动态添加）
 
 CAST
@@ -97,8 +94,8 @@ CAST
     column stripe_subscription.current_period_start to timestamptz using unix-timestamp-ms-to-timestamptz,
     column stripe_subscription.current_period_end to timestamptz using unix-timestamp-ms-to-timestamptz,
     
-    -- user_account_delete_record (0 表示未删除，需要保留 0 -> 1970-01-01)
-    column user_account_delete_record.delete_marker to timestamptz using unix-timestamp-ms-to-timestamptz-allow-zero,
+    -- user_account_delete_record (NOT NULL DEFAULT 0; 0 表示未删除 → NULL，>0 表示删除时间)
+    column user_account_delete_record.delete_marker to timestamptz drop not null using unix-timestamp-ms-to-timestamptz,
     
     -- pipeline_v2
     column pipeline_v2.created_at to timestamptz using unix-timestamp-ms-to-timestamptz,
