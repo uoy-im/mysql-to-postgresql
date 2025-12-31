@@ -20,7 +20,6 @@ INCLUDING ONLY TABLE NAMES MATCHING ~/^pipeline$/
 -- 表过滤条件（由脚本动态添加）
 
 CAST
-    type datetime to timestamp,
     type json to jsonb,
     
     -- ============================================================================
