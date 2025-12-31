@@ -15,7 +15,7 @@ SET MySQL PARAMETERS
 SET PostgreSQL PARAMETERS
     timezone to 'UTC'
 
-INCLUDING ONLY TABLE NAMES MATCHING ~/^dbpass_sql_record$/
+INCLUDING ONLY TABLE NAMES MATCHING ~/^pipeline$/
 -- EXCLUDING TABLE NAMES MATCHING ~/^text_content$/, ~/^dbpass_upsert_record$/
 
 -- 表过滤条件（由脚本动态添加）
