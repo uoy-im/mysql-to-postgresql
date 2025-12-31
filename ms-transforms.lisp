@@ -41,3 +41,23 @@
             (format nil
                     "~d-~2,'0d-~2,'0d ~2,'0d:~2,'0d:~2,'0d.~3,'0dZ"
                     year month date hour minute second milliseconds)))))))
+
+(defun unix-timestamp-ms-to-timestamptz-default-epoch (unixtime-ms-string)
+  "Takes a unix timestamp in milliseconds and converts it to timestamptz.
+   Returns '1970-01-01 00:00:00.000Z' for nil, 0, or negative values.
+   Preserves millisecond precision."
+  (if (null unixtime-ms-string)
+      "1970-01-01 00:00:00.000Z"
+      (let ((unixtime-ms (ensure-parse-integer unixtime-ms-string)))
+        (if (or (null unixtime-ms) (<= unixtime-ms 0))
+            "1970-01-01 00:00:00.000Z"
+            (let* ((unix-universal-diff (load-time-value
+                                          (encode-universal-time 0 0 0 1 1 1970 0)))
+                   (seconds (floor unixtime-ms 1000))
+                   (milliseconds (mod unixtime-ms 1000)))
+              (multiple-value-bind
+                (second minute hour date month year)
+                (decode-universal-time (+ seconds unix-universal-diff) 0)
+                (format nil
+                        "~d-~2,'0d-~2,'0d ~2,'0d:~2,'0d:~2,'0d.~3,'0dZ"
+                        year month date hour minute second milliseconds)))))))
