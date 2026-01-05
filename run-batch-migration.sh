@@ -236,7 +236,7 @@ main() {
                 run_batch $batch
                 if [[ $batch -lt 5 ]]; then
                     echo -e "${YELLOW}▶ 等待 5 秒后执行下一批...${NC}"
-                    sleep 5
+                    # sleep 5
                 fi
             done
             echo -e "${GREEN}============================================${NC}"
