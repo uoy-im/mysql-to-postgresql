@@ -40,7 +40,7 @@ BASE_CONFIG="${CONFIG_DIR}/pgloader-config-base.load"
 # ============================================================================
 # 第1批：text_content 太大，手动迁移，这里不处理
 # 始终排除的表
-ALWAYS_EXCLUDE=("text_content" "dbpaas_upsert_record")
+ALWAYS_EXCLUDE=("text_content" "dbpaas_upsert_record" "project_index_v2")
 
 # 第2批：大表 (455MB)
 BATCH_2_TABLES=("pipeline_snapshot")
@@ -181,8 +181,8 @@ run_batch() {
     echo -e "${GREEN}▶ 开始执行第 ${batch} 批迁移${NC}"
     echo -e "${GREEN}============================================${NC}"
     
-    # 清理连接池
-    cleanup_connections
+    # 清理连接池(链接参数里不带pooler, 不需要再清楚链接)
+    # cleanup_connections
     
     # 生成配置文件
     local config_file
@@ -191,7 +191,7 @@ run_batch() {
     
     # 执行迁移
     echo -e "${YELLOW}▶ 开始 pgloader 迁移...${NC}"
-    if pgloader --no-ssl-cert-verification --dynamic-space-size 16384 "${config_file}"; then
+    if pgloader --load-lisp-file ms-transforms.lisp --no-ssl-cert-verification --dynamic-space-size 16384 "${config_file}"; then
         echo -e "${GREEN}✓ 第 ${batch} 批迁移成功！${NC}"
         rm -f "${config_file}"
         return 0
