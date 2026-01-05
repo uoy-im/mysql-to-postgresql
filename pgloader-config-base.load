@@ -17,7 +17,5 @@ SET PostgreSQL PARAMETERS
 
 -- 表过滤条件（由脚本动态添加）
 
-ALTER TABLE NAMES MATCHING ~/./ SET SCHEMA 'public'
-
 CAST
     type json to jsonb
