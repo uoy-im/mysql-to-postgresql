@@ -3,6 +3,16 @@
 ;;;;
 ;;;; 使用方法：
 ;;;;   pgloader --load-lisp-file ms-transforms.lisp config.load
+;;;;
+;;;; 函数说明：
+;;;;   unix-timestamp-ms-to-timestamptz
+;;;;     - 0/-1/NULL → NULL，正数 → timestamptz
+;;;;
+;;;;   unix-timestamp-ms-to-timestamptz-allow-zero
+;;;;     - 0 → 1970-01-01，-1/NULL → NULL，正数 → timestamptz
+;;;;
+;;;;   unix-timestamp-ms-to-timestamptz-default-epoch
+;;;;     - 0/-1/NULL → 1970-01-01，正数 → timestamptz
 
 (in-package #:pgloader.transforms)
 
