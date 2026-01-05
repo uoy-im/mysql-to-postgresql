@@ -152,9 +152,30 @@ generate_config() {
     local template
     template="$(cat "${BASE_CONFIG}")"
     
+    # 生成 SET SCHEMA 配置（与表过滤条件使用相同的表列表）
+    local set_schema_config=""
+    case $batch in
+        2)
+            set_schema_config="ALTER TABLE NAMES MATCHING $(tables_to_regex "${BATCH_2_TABLES[@]}") SET SCHEMA 'public'"
+            ;;
+        3)
+            set_schema_config="ALTER TABLE NAMES MATCHING $(tables_to_regex "${BATCH_3_TABLES[@]}") SET SCHEMA 'public'"
+            ;;
+        4)
+            set_schema_config="ALTER TABLE NAMES MATCHING $(tables_to_regex "${BATCH_4_TABLES[@]}") SET SCHEMA 'public'"
+            ;;
+        5)
+            # 第5批是所有小表，使用通配符
+            set_schema_config="ALTER TABLE NAMES MATCHING ~/./ SET SCHEMA 'public'"
+            ;;
+    esac
+    
     # 替换占位符，插入表过滤条件
     template="${template//-- 表过滤条件（由脚本动态添加）/${batch_comment}
 ${table_filter}}"
+    
+    # 替换 SET SCHEMA 占位符
+    template="${template//-- SET SCHEMA 配置（由脚本动态添加）/${set_schema_config}}"
     
     # 添加验证 SQL
     template="${template}
