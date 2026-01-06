@@ -40,7 +40,7 @@ BASE_CONFIG="${CONFIG_DIR}/pgloader-config-base.load"
 # ============================================================================
 # 第1批：text_content 太大，手动迁移，这里不处理
 # 始终排除的表
-ALWAYS_EXCLUDE=("text_content" "dbpaas_upsert_record" "project_index_v2")
+ALWAYS_EXCLUDE=("text_content" "project_data" "token_usage" "pipeline_step" "project_index_v2" "project_deploy_key" "benchmark_case_run" "style_config_learn_task" "predefined_style" "user_style_configs" "gaia_benchmark_case_result" "benchmark_run" "ask_user_response" "gaia_benchmark_round_result" "dbpaas_upsert_record" "env_config" "project_notion_auth" "signup_invite_code")
 
 # 第2批：大表 (455MB)
 BATCH_2_TABLES=("pipeline_snapshot")
@@ -51,7 +51,7 @@ BATCH_3_TABLES=("pipeline_result_snippet")
 BATCH_3_DESC="大表 (397MB)"
 
 # 第4批：中大表 (~180MB)
-BATCH_4_TABLES=("pipeline_result_event" "project_data" "project_index" "pipeline")
+BATCH_4_TABLES=("pipeline_result_event" "project_index" "pipeline")
 BATCH_4_DESC="中大表 (~180MB)"
 
 # 第5批：剩余所有小表（自动计算需要排除的表）
