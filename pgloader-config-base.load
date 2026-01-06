@@ -18,4 +18,74 @@ SET PostgreSQL PARAMETERS
 -- 表过滤条件（由脚本动态添加）
 
 CAST
-    type json to jsonb
+    type json to jsonb,
+    
+    -- ============================================================================
+    -- 毫秒级 bigint 时间戳转换为 timestamptz
+    -- 基于 bigint-timestamp-fields.md，转换以下两类字段：
+    --   1. 作为时间-default(无): 使用 unix-timestamp-ms-to-timestamptz
+    --   2. 作为时间-default(0): 使用 unix-timestamp-ms-to-timestamptz-allow-zero (0 → 1970-01-01)
+    -- 运行命令: pgloader --load-lisp-file ms-transforms.lisp config.load
+    -- ============================================================================
+    
+    -- ==================== 作为时间-default(无) ====================
+    
+    -- project_index
+    column project_index.created_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    
+    -- project_index_v2
+    column project_index_v2.created_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    column project_index_v2.updated_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    
+    -- token_usage
+    column token_usage.created_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    
+    -- fulfill_ai_credit_change_log
+    column fulfill_ai_credit_change_log.op_time to timestamptz using unix-timestamp-ms-to-timestamptz,
+    
+    -- fulfill_ai_credit_usage_log
+    column fulfill_ai_credit_usage_log.op_time to timestamptz using unix-timestamp-ms-to-timestamptz,
+    
+    -- fulfill_ai_credit
+    column fulfill_ai_credit.start_time to timestamptz using unix-timestamp-ms-to-timestamptz,
+    column fulfill_ai_credit.end_time to timestamptz using unix-timestamp-ms-to-timestamptz,
+    
+    -- fulfill_ai_free_credit_distribution_log
+    column fulfill_ai_free_credit_distribution_log.begin_time to timestamptz using unix-timestamp-ms-to-timestamptz,
+    
+    -- stripe_subscription
+    column stripe_subscription.start_time to timestamptz using unix-timestamp-ms-to-timestamptz,
+    column stripe_subscription.current_period_start to timestamptz using unix-timestamp-ms-to-timestamptz,
+    column stripe_subscription.current_period_end to timestamptz using unix-timestamp-ms-to-timestamptz,
+    
+    -- gitea_backup_tasks
+    column gitea_backup_tasks.updated_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    
+    -- pipeline_v2
+    column pipeline_v2.created_at to timestamptz using unix-timestamp-ms-to-timestamptz,
+    
+    -- pipeline_result_snippet
+    column pipeline_result_snippet.generated_at to timestamptz using unix-timestamp-ms-to-timestamptz,
+    column pipeline_result_snippet.created_at to timestamptz using unix-timestamp-ms-to-timestamptz,
+    
+    -- pipeline_event
+    column pipeline_event.generated_at to timestamptz using unix-timestamp-ms-to-timestamptz,
+    column pipeline_event.created_at to timestamptz using unix-timestamp-ms-to-timestamptz,
+    
+    -- pipeline_feedback
+    column pipeline_feedback.feedback_at to timestamptz using unix-timestamp-ms-to-timestamptz,
+    
+    -- user_third_party_auth
+    column user_third_party_auth.created_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    column user_third_party_auth.updated_ts to timestamptz using unix-timestamp-ms-to-timestamptz,
+    
+    -- ==================== 作为时间-default(0) ====================
+    -- 使用 allow-zero 函数，0 转换为 1970-01-01 00:00:00.000Z
+    
+    -- pipeline
+    column pipeline.start_process_time to timestamptz using unix-timestamp-ms-to-timestamptz-allow-zero,
+    column pipeline.end_process_time to timestamptz using unix-timestamp-ms-to-timestamptz-allow-zero,
+    
+    -- project_index
+    column project_index.updated_ts to timestamptz using unix-timestamp-ms-to-timestamptz-allow-zero
+;
