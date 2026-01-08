@@ -89,14 +89,6 @@ generate_config() {
     template="${template//-- 表过滤条件（由脚本动态添加）/-- 第${batch}批
 ${table_filter}}"
     
-    local after_load_sql
-    after_load_sql=$(cat <<'EOF'
-
-AFTER LOAD DO
-    \$\$ SELECT 'Batch ${batch} completed. Tables in public: ' || COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'; \$\$;"
-EOF
-)
-    template="${template}${after_load_sql}"
     template=$(substitute_env_vars "$template")
     
     local config_file
