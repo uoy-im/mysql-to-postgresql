@@ -93,7 +93,7 @@ ${table_filter}}"
     after_load_sql=$(cat <<'EOF'
 
 AFTER LOAD DO
-    $$ SELECT 'Migration completed. Tables in public: ' || COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'; $$;
+    \$\$ SELECT 'Batch ${batch} completed. Tables in public: ' || COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'; \$\$;"
 EOF
 )
     template="${template}${after_load_sql}"
