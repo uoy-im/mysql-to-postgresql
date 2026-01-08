@@ -15,7 +15,26 @@ SET MySQL PARAMETERS
 SET PostgreSQL PARAMETERS
     timezone to 'UTC'
 
--- 表过滤条件（由脚本动态添加）
+EXCLUDING TABLE NAMES MATCHING
+    ~/^text_content$/,
+    ~/^project_data$/,
+    ~/^token_usage$/,
+    ~/^pipeline_step$/,
+    ~/^project_index_v2$/,
+    ~/^project_deploy_key$/,
+    ~/^benchmark_case_run$/,
+    ~/^style_config_learn_task$/,
+    ~/^predefined_style$/,
+    ~/^user_style_configs$/,
+    ~/^gaia_benchmark_case_result$/,
+    ~/^benchmark_run$/,
+    ~/^ask_user_response$/,
+    ~/^gaia_benchmark_round_result$/,
+    ~/^dbpaas_upsert_record$/,
+    ~/^env_config$/,
+    ~/^project_notion_auth$/,
+    ~/^signup_invite_code$/,
+    ~/^_peerdb_.*$/
 
 CAST
     type json to jsonb,
